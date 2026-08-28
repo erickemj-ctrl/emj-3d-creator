@@ -532,6 +532,290 @@ function init() {
     selectionBox.name = 'selectionBox';
     selectionBox.visible = false;
     scene.add(selectionBox);
+
+    // ========== TINKERCAD-STYLE HANDLES (CORNER/EDGE SCALE + ROTATION ARCS) ==========
+    var handlesGroup = new THREE.Group();
+    handlesGroup.name = 'handlesGroup';
+    handlesGroup.visible = false;
+    scene.add(handlesGroup);
+    var handleMeshes = []; // {mesh, type: 'corner'|'edge'|'rot', axis, cornerIndex}
+    var handleDrag = null; // {type, startPoint, startScale, startRot, axis, corner, plane}
+    var HANDLE_SIZE = 8;
+    var EDGE_HANDLE_SIZE = 6;
+    var ROT_ARC_RADIUS = 30;
+    var HANDLE_MAT = new THREE.MeshBasicMaterial({ color: 0x1a9dff, transparent: true, opacity: 0.9, depthTest: true });
+    var HANDLE_MAT_HOVER = new THREE.MeshBasicMaterial({ color: 0xff9500, transparent: true, opacity: 1.0, depthTest: true });
+    var EDGE_MAT = new THREE.MeshBasicMaterial({ color: 0x1a9dff, transparent: true, opacity: 0.7, depthTest: true });
+    var ROT_MAT = new THREE.LineBasicMaterial({ color: 0x1a9dff, transparent: true, opacity: 0.8, linewidth: 2 });
+
+    function buildHandles() {
+      while (handlesGroup.children.length) handlesGroup.remove(handlesGroup.children[0]);
+      handleMeshes = [];
+      if (!selectedObj || selectedObj.locked) return;
+      var box = new THREE.Box3().setFromObject(selectedObj.mesh);
+      var min = box.min, max = box.max;
+      var cx = (min.x + max.x) / 2, cy = (min.y + max.y) / 2, cz = (min.z + max.z) / 2;
+      var hx = (max.x - min.x) / 2, hy = (max.y - min.y) / 2, hz = (max.z - min.z) / 2;
+
+      // 8 corner handles (scale)
+      var corners = [
+        [min.x, min.y, min.z], [max.x, min.y, min.z], [max.x, max.y, min.z], [min.x, max.y, min.z],
+        [min.x, min.y, max.z], [max.x, min.y, max.z], [max.x, max.y, max.z], [min.x, max.y, max.z]
+      ];
+      corners.forEach(function(c, i) {
+        var geo = new THREE.BoxGeometry(HANDLE_SIZE, HANDLE_SIZE, HANDLE_SIZE);
+        var m = new THREE.Mesh(geo, HANDLE_MAT.clone());
+        m.position.set(c[0], c[1], c[2]);
+        m.userData = { type: 'corner', corner: i, axis: null };
+        handlesGroup.add(m); handleMeshes.push({ mesh: m, type: 'corner', corner: i });
+      });
+
+      // 12 edge handles (scale along edge)
+      var edges = [
+        // bottom 4 edges (y=min.y)
+        { p1: [min.x, min.y, min.z], p2: [max.x, min.y, min.z], axis: 'x' },
+        { p1: [max.x, min.y, min.z], p2: [max.x, max.y, min.z], axis: 'y' },
+        { p1: [max.x, max.y, min.z], p2: [min.x, max.y, min.z], axis: 'x' },
+        { p1: [min.x, max.y, min.z], p2: [min.x, min.y, min.z], axis: 'y' },
+        // top 4 edges (y=max.y)
+        { p1: [min.x, max.y, max.z], p2: [max.x, max.y, max.z], axis: 'x' },
+        { p1: [max.x, max.y, max.z], p2: [max.x, min.y, max.z], axis: 'y' },
+        { p1: [max.x, min.y, max.z], p2: [min.x, min.y, max.z], axis: 'x' },
+        { p1: [min.x, min.y, max.z], p2: [min.x, max.y, max.z], axis: 'y' },
+        // 4 vertical edges
+        { p1: [min.x, min.y, min.z], p2: [min.x, min.y, max.z], axis: 'z' },
+        { p1: [max.x, min.y, min.z], p2: [max.x, min.y, max.z], axis: 'z' },
+        { p1: [max.x, max.y, min.z], p2: [max.x, max.y, max.z], axis: 'z' },
+        { p1: [min.x, max.y, min.z], p2: [min.x, max.y, max.z], axis: 'z' },
+      ];
+      edges.forEach(function(e) {
+        var mx = (e.p1[0] + e.p2[0]) / 2, my = (e.p1[1] + e.p2[1]) / 2, mz = (e.p1[2] + e.p2[2]) / 2;
+        var geo = new THREE.SphereGeometry(EDGE_HANDLE_SIZE, 8, 8);
+        var m = new THREE.Mesh(geo, EDGE_MAT.clone());
+        m.position.set(mx, my, mz);
+        m.userData = { type: 'edge', axis: e.axis };
+        handlesGroup.add(m); handleMeshes.push({ mesh: m, type: 'edge', axis: e.axis });
+      });
+
+      // 4 rotation arcs on top face (Y=max.y) - one per corner
+      var rotCorners = [
+        { corner: 1, center: [max.x, max.y, min.z], startAngle: -Math.PI/2, endAngle: 0, axis: 'z' },      // front-right
+        { corner: 2, center: [max.x, max.y, max.z], startAngle: 0, endAngle: Math.PI/2, axis: 'z' },       // back-right
+        { corner: 3, center: [min.x, max.y, max.z], startAngle: Math.PI/2, endAngle: Math.PI, axis: 'z' },  // back-left
+        { corner: 0, center: [min.x, max.y, min.z], startAngle: Math.PI, endAngle: -Math.PI/2, axis: 'z' }, // front-left
+      ];
+      rotCorners.forEach(function(rc) {
+        var arcGeo = new THREE.RingGeometry(ROT_ARC_RADIUS - 6, ROT_ARC_RADIUS, 32, 1, rc.startAngle, rc.endAngle - rc.startAngle);
+        // RingGeometry creates a flat ring on XY plane; we need it on XZ plane (horizontal)
+        // Create custom arc as Line
+        var pts = [];
+        var segs = 16;
+        for (var s = 0; s <= segs; s++) {
+          var a = rc.startAngle + (rc.endAngle - rc.startAngle) * s / segs;
+          pts.push(new THREE.Vector3(Math.cos(a) * ROT_ARC_RADIUS, 0, Math.sin(a) * ROT_ARC_RADIUS));
+        }
+        var arcGeo2 = new THREE.BufferGeometry().setFromPoints(pts);
+        var arc = new THREE.Line(arcGeo2, ROT_MAT.clone());
+        arc.rotation.x = -Math.PI / 2; // lay flat on XZ plane
+        arc.position.set(rc.center[0], rc.center[1], rc.center[2]);
+        arc.userData = { type: 'rot', axis: 'z', corner: rc.corner };
+        handlesGroup.add(arc); handleMeshes.push({ mesh: arc, type: 'rot', axis: 'z', corner: rc.corner });
+      });
+
+      // 4 rotation arcs on bottom face (Y=min.y)
+      var rotCornersBot = [
+        { corner: 5, center: [max.x, min.y, max.z], startAngle: -Math.PI/2, endAngle: 0, axis: 'z' },
+        { corner: 6, center: [max.x, min.y, min.z], startAngle: 0, endAngle: Math.PI/2, axis: 'z' },
+        { corner: 7, center: [min.x, min.y, min.z], startAngle: Math.PI/2, endAngle: Math.PI, axis: 'z' },
+        { corner: 4, center: [min.x, min.y, max.z], startAngle: Math.PI, endAngle: -Math.PI/2, axis: 'z' },
+      ];
+      rotCornersBot.forEach(function(rc) {
+        var pts = [];
+        var segs = 16;
+        for (var s = 0; s <= segs; s++) {
+          var a = rc.startAngle + (rc.endAngle - rc.startAngle) * s / segs;
+          pts.push(new THREE.Vector3(Math.cos(a) * ROT_ARC_RADIUS, 0, Math.sin(a) * ROT_ARC_RADIUS));
+        }
+        var arcGeo2 = new THREE.BufferGeometry().setFromPoints(pts);
+        var arc = new THREE.Line(arcGeo2, ROT_MAT.clone());
+        arc.rotation.x = -Math.PI / 2;
+        arc.position.set(rc.center[0], rc.center[1], rc.center[2]);
+        arc.userData = { type: 'rot', axis: 'z', corner: rc.corner };
+        handlesGroup.add(arc); handleMeshes.push({ mesh: arc, type: 'rot', axis: 'z', corner: rc.corner });
+      });
+
+      // Apply object's world transform to handles group
+      handlesGroup.position.copy(selectedObj.mesh.position);
+      handlesGroup.quaternion.copy(selectedObj.mesh.quaternion);
+      handlesGroup.scale.copy(selectedObj.mesh.scale);
+    }
+
+    function clearHandles() {
+      while (handlesGroup.children.length) handlesGroup.remove(handlesGroup.children[0]);
+      handleMeshes = [];
+    }
+
+    function updateHandles() {
+      if (!selectedObj || selectedObj.locked) { handlesGroup.visible = false; return; }
+      clearHandles();
+      buildHandles();
+      handlesGroup.visible = true;
+    }
+
+    // ========== HANDLE INTERACTION (RAYCAST + DRAG) ==========
+    var handleRaycaster = new THREE.Raycaster();
+    var handleMouse = new THREE.Vector2();
+
+    function getIntersectedHandle(e) {
+      var rect = renderer.domElement.getBoundingClientRect();
+      handleMouse.set(
+        ((e.clientX - rect.left) / rect.width) * 2 - 1,
+        -((e.clientY - rect.top) / rect.height) * 2 + 1
+      );
+      handleRaycaster.setFromCamera(handleMouse, camera);
+      var meshes = handleMeshes.map(function(h){ return h.mesh; });
+      var hits = handleRaycaster.intersectObjects(meshes, false);
+      if (hits.length > 0) return hits[0].object;
+      return null;
+    }
+
+    function beginHandleDrag(handle, e) {
+      if (!selectedObj) return;
+      var box = new THREE.Box3().setFromObject(selectedObj.mesh);
+      var min = box.min.clone(), max = box.max.clone();
+      var center = box.getCenter(new THREE.Vector3());
+      var hitPoint = new THREE.Vector3();
+      var rect = renderer.domElement.getBoundingClientRect();
+      var mouse = new THREE.Vector2(
+        ((e.clientX - rect.left) / rect.width) * 2 - 1,
+        -((e.clientY - rect.top) / rect.height) * 2 + 1
+      );
+      var rc = new THREE.Raycaster(); rc.setFromCamera(mouse, camera);
+      var plane = new THREE.Plane();
+      var ud = handle.userData;
+
+      if (ud.type === 'corner') {
+        // Scale from opposite corner - plane perpendicular to view through corner
+        var cornerWorld = handle.getWorldPosition(new THREE.Vector3());
+        plane.setFromNormalAndCoplanarPoint(camera.getWorldDirection(new THREE.Vector3()).negate(), cornerWorld);
+        rc.ray.intersectPlane(plane, hitPoint);
+        handleDrag = { type: 'corner', corner: ud.corner, startPoint: hitPoint.clone(), startMin: min.clone(), startMax: max.clone(), startCenter: center.clone() };
+      } else if (ud.type === 'edge') {
+        // Scale along edge axis
+        var edgeWorld = handle.getWorldPosition(new THREE.Vector3());
+        var axisVec = new THREE.Vector3();
+        if (ud.axis === 'x') axisVec.set(1,0,0);
+        else if (ud.axis === 'y') axisVec.set(0,1,0);
+        else axisVec.set(0,0,1);
+        axisVec.applyQuaternion(selectedObj.mesh.quaternion);
+        plane.setFromNormalAndCoplanarPoint(axisVec, edgeWorld);
+        rc.ray.intersectPlane(plane, hitPoint);
+        handleDrag = { type: 'edge', axis: ud.axis, startPoint: hitPoint.clone(), startMin: min.clone(), startMax: max.clone() };
+      } else if (ud.type === 'rot') {
+        // Rotate around Z (vertical axis through center)
+        var centerWorld = selectedObj.mesh.getWorldPosition(new THREE.Vector3());
+        plane.setFromNormalAndCoplanarPoint(new THREE.Vector3(0,1,0), centerWorld);
+        rc.ray.intersectPlane(plane, hitPoint);
+        var startAngle = Math.atan2(hitPoint.z - centerWorld.z, hitPoint.x - centerWorld.x);
+        handleDrag = { type: 'rot', axis: 'z', startAngle: startAngle, startRot: selectedObj.mesh.rotation.z };
+      }
+
+      if (handleDrag) {
+        saveState();
+        if (orbit) orbit.enabled = false;
+        renderer.domElement.style.cursor = ud.type === 'rot' ? 'grabbing' : 'nesw-resize';
+      }
+    }
+
+    function onHandleMove(e) {
+      if (!handleDrag || !selectedObj) return;
+      var rect = renderer.domElement.getBoundingClientRect();
+      var mouse = new THREE.Vector2(
+        ((e.clientX - rect.left) / rect.width) * 2 - 1,
+        -((e.clientY - rect.top) / rect.height) * 2 + 1
+      );
+      var rc = new THREE.Raycaster(); rc.setFromCamera(mouse, camera);
+      var plane = new THREE.Plane();
+      var hitPoint = new THREE.Vector3();
+
+      if (handleDrag.type === 'corner') {
+        var cornerHandle = handleMeshes.find(function(h){ return h.type === 'corner' && h.corner === handleDrag.corner; });
+        if (!cornerHandle) return;
+        var cornerWorld = cornerHandle.mesh.getWorldPosition(new THREE.Vector3());
+        plane.setFromNormalAndCoplanarPoint(camera.getWorldDirection(new THREE.Vector3()).negate(), cornerWorld);
+        if (!rc.ray.intersectPlane(plane, hitPoint)) return;
+        var delta = hitPoint.clone().sub(handleDrag.startPoint);
+        // Project delta onto object's local axes
+        var invQuat = selectedObj.mesh.quaternion.clone().invert();
+        var localDelta = delta.clone().applyQuaternion(invQuat);
+        var newMin = handleDrag.startMin.clone();
+        var newMax = handleDrag.startMax.clone();
+        var c = handleDrag.corner;
+        // Corner indices: 0=min,min,min  1=max,min,min  2=max,max,min  3=min,max,min
+        // 4=min,min,max  5=max,min,max  6=max,max,max  7=min,max,max
+        if (c === 0) { newMin.add(localDelta); }
+        else if (c === 1) { newMin.y += localDelta.y; newMin.z += localDelta.z; newMax.x += localDelta.x; }
+        else if (c === 2) { newMin.z += localDelta.z; newMax.x += localDelta.x; newMax.y += localDelta.y; }
+        else if (c === 3) { newMin.x += localDelta.x; newMin.z += localDelta.z; newMax.y += localDelta.y; }
+        else if (c === 4) { newMin.x += localDelta.x; newMin.y += localDelta.y; newMax.z += localDelta.z; }
+        else if (c === 5) { newMin.y += localDelta.y; newMax.x += localDelta.x; newMax.z += localDelta.z; }
+        else if (c === 6) { newMax.add(localDelta); }
+        else if (c === 7) { newMin.x += localDelta.x; newMax.y += localDelta.y; newMax.z += localDelta.z; }
+        // Apply scale/position from new bounds
+        var newSize = new THREE.Vector3().subVectors(newMax, newMin);
+        var newCenter = new THREE.Vector3().addVectors(newMin, newMax).multiplyScalar(0.5);
+        var invScale = new THREE.Vector3().copy(selectedObj.mesh.scale);
+        if (invScale.x !== 0) invScale.x = 1 / invScale.x;
+        if (invScale.y !== 0) invScale.y = 1 / invScale.y;
+        if (invScale.z !== 0) invScale.z = 1 / invScale.z;
+        // We need to compute scale from size change relative to original geometry
+        // Simpler: compute scale factors from size ratio
+        var objBox = new THREE.Box3().setFromObject(selectedObj.mesh);
+        var objSize = objBox.getSize(new THREE.Vector3());
+        if (objSize.x > 0.001) selectedObj.mesh.scale.x *= (newSize.x / objSize.x);
+        if (objSize.y > 0.001) selectedObj.mesh.scale.y *= (newSize.y / objSize.y);
+        if (objSize.z > 0.001) selectedObj.mesh.scale.z *= (newSize.z / objSize.z);
+        // Position adjustment
+        var centerDelta = newCenter.clone().sub(objBox.getCenter(new THREE.Vector3()));
+        selectedObj.mesh.position.add(centerDelta);
+        updateHandles(); updateProperties();
+      } else if (handleDrag.type === 'edge') {
+        var edgeHandle = handleMeshes.find(function(h){ return h.type === 'edge' && h.axis === handleDrag.axis; });
+        if (!edgeHandle) return;
+        var ew = edgeHandle.mesh.getWorldPosition(new THREE.Vector3());
+        var axisVec = new THREE.Vector3();
+        if (handleDrag.axis === 'x') axisVec.set(1,0,0);
+        else if (handleDrag.axis === 'y') axisVec.set(0,1,0);
+        else axisVec.set(0,0,1);
+        axisVec.applyQuaternion(selectedObj.mesh.quaternion);
+        plane.setFromNormalAndCoplanarPoint(axisVec, ew);
+        if (!rc.ray.intersectPlane(plane, hitPoint)) return;
+        var delta = hitPoint.clone().sub(handleDrag.startPoint);
+        var localDelta = delta.clone().applyQuaternion(selectedObj.mesh.quaternion.clone().invert());
+        var objBox = new THREE.Box3().setFromObject(selectedObj.mesh);
+        var objSize = objBox.getSize(new THREE.Vector3());
+        var axisIdx = { x:0, y:1, z:2 }[handleDrag.axis];
+        var scaleFactor = 1 + (localDelta[handleDrag.axis] / (objSize[axisIdx] || 1));
+        selectedObj.mesh.scale[handleDrag.axis] *= scaleFactor;
+        updateHandles(); updateProperties();
+      } else if (handleDrag.type === 'rot') {
+        var centerWorld = selectedObj.mesh.getWorldPosition(new THREE.Vector3());
+        plane.setFromNormalAndCoplanarPoint(new THREE.Vector3(0,1,0), centerWorld);
+        if (!rc.ray.intersectPlane(plane, hitPoint)) return;
+        var currAngle = Math.atan2(hitPoint.z - centerWorld.z, hitPoint.x - centerWorld.x);
+        var deltaAngle = currAngle - handleDrag.startAngle;
+        selectedObj.mesh.rotation.z = handleDrag.startRot + deltaAngle;
+        updateHandles(); updateProperties();
+      }
+    }
+
+    function endHandleDrag() {
+      if (handleDrag) {
+        handleDrag = null;
+        if (orbit) orbit.enabled = true;
+        renderer.domElement.style.cursor = '';
+      }
+    }
   } catch(e) { console.warn('TransformControls failed:', e); }
 
   renderer.domElement.addEventListener('pointerdown', onPointerDown);
@@ -561,6 +845,13 @@ function animate() {
       selectionBox.visible = true;
     }
     else selectionBox.visible = false;
+  }
+  if (handlesGroup) {
+    if (selectedObj && !selectedObj.locked && handlesGroup.visible) {
+      handlesGroup.position.copy(selectedObj.mesh.position);
+      handlesGroup.quaternion.copy(selectedObj.mesh.quaternion);
+      handlesGroup.scale.copy(selectedObj.mesh.scale);
+    }
   }
   renderer.render(scene, camera);
   if (cameraDirty) { drawRulers(); cameraDirty = false; }
@@ -871,6 +1162,13 @@ function onPointerDown(e) {
   if (e.button !== 0) return;
   if (gizmoDragging) return;
 
+  // 1) Check for handle intersection FIRST (Tinkercad-style handles)
+  var handle = getIntersectedHandle(e);
+  if (handle) {
+    beginHandleDrag(handle, e);
+    return;
+  }
+
   var rect = renderer.domElement.getBoundingClientRect();
   var mouse = new THREE.Vector2(
     ((e.clientX - rect.left) / rect.width) * 2 - 1,
@@ -928,6 +1226,7 @@ function selectObject(obj) {
     }
   } else {
     if (transform) transform.detach();
+    clearHandles();
     var se = document.getElementById('statusObj');
     if (se) se.textContent = '';
   }
@@ -935,6 +1234,7 @@ function selectObject(obj) {
   updateObjectList();
   updateProperties();
   updateQuickEdit();
+  if (obj) updateHandles();
 }
 
 // ========== TOOLS ==========
@@ -973,6 +1273,7 @@ function pointerToDragPlane(e) {
   return rc.ray.intersectPlane(dragPlane, t) ? t : null;
 }
 function onPointerMove(e) {
+  if (handleDrag) { onHandleMove(e); return; }
   if (!dragSession) return;
   if (gizmoDragging) { dragSession = null; return; }
   var pt = pointerToDragPlane(e);
@@ -987,6 +1288,7 @@ function onPointerMove(e) {
   }
 }
 function onPointerUp() {
+  if (handleDrag) { endHandleDrag(); return; }
   if (!dragSession) return;
   var moved = dragSession.moved;
   dragSession = null;
