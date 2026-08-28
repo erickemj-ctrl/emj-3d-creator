@@ -154,6 +154,13 @@
     .toast.info { border-left:3px solid var(--accent); }
     .toast.warning { border-left:3px solid var(--warning); }
 
+    .ruler { position:fixed; z-index:6; pointer-events:none; background:rgba(28,29,34,.92); }
+    #rulerTop { top:0; left:0; width:100vw; height:26px; }
+    #rulerLeft { top:26px; left:0; height:calc(100vh - 26px); width:26px; }
+    #statusObj { margin-left:auto; color:var(--accent); font-weight:600; font-size:10px; max-width:340px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .unit-sel { background:transparent; border:none; color:var(--t1); font-size:11px; font-weight:600; cursor:pointer; outline:none; padding:0; }
+    .unit-sel option { background:var(--bg2); color:var(--t1); }
+
     ::-webkit-scrollbar { width:4px; }
     ::-webkit-scrollbar-track { background:transparent; }
     ::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
@@ -167,8 +174,11 @@
 </div>
 
 <div class="fpanel bar-status" id="statusBar">
-  <span id="statusText">Listo</span>
+  <span id="statusText">Listo</span><span id="statusObj"></span>
 </div>
+
+<canvas id="rulerTop" class="ruler"></canvas>
+<canvas id="rulerLeft" class="ruler"></canvas>
 
 <div class="fpanel bar-tools" id="barTools">
   <button class="fbtn active" onclick="setTool('select')" id="tSelect" title="Seleccionar (V)"><i class="fas fa-mouse-pointer"></i><span>Ver</span></button>
@@ -184,6 +194,8 @@
   <button class="fbtn" onclick="frameAll()" title="Enfocar todo (F)"><i class="fas fa-compress-arrows-alt"></i><span>Enfocar</span></button>
   <div class="fsep"></div>
   <button class="fbtn" onclick="toggleObjList()" id="tList" title="Lista de objetos (L)"><i class="fas fa-layer-group"></i><span>Lista</span></button>
+  <div class="fsep"></div>
+  <button class="fbtn" onclick="toggleSnap()" id="tSnap" title="Ajustar a cuadricula (N)"><i class="fas fa-magnet"></i><span>Snap</span></button>
   <div class="fsep"></div>
   <button class="fbtn" onclick="undo()" id="tUndo" title="Deshacer (Ctrl+Z)"><i class="fas fa-undo"></i><span>Deshacer</span></button>
   <button class="fbtn" onclick="redo()" id="tRedo" title="Rehacer (Ctrl+Y)"><i class="fas fa-redo"></i><span>Rehacer</span></button>
@@ -206,6 +218,12 @@
 <div class="fpanel bar-add">
   <button class="fbtn" onclick="importSTL()" title="Importar STL"><i class="fas fa-file-import"></i><span>Importar</span></button>
   <button class="fbtn" onclick="exportSTL()" title="Exportar STL"><i class="fas fa-download"></i><span>Exportar</span></button>
+  <button class="fbtn" title="Unidades: cm / mm" style="flex-direction:row;width:auto;gap:4px;padding:0 8px;">
+    <i class="fas fa-ruler" style="font-size:14px;"></i>
+    <select id="unitSel" class="unit-sel" onchange="setUnit(this.value)">
+      <option value="cm" selected>cm</option><option value="mm">mm</option>
+    </select>
+  </button>
   <div class="fsep"></div>
   <button class="fbtn" onclick="toggleShapeStrip()" id="tAddShape" title="Agregar forma" style="width:56px;height:56px;background:var(--grad);color:#fff;border-radius:12px;"><i class="fas fa-plus" style="font-size:22px;"></i><span style="color:#fff;">Forma</span></button>
   <div class="fsep"></div>
@@ -238,7 +256,7 @@
     <div class="ctx-row"><input type="text" id="propName" onchange="renameSelected(this.value)"></div>
   </div>
   <div class="ctx-section">
-    <div class="ctx-label">Posicion</div>
+    <div class="ctx-label">Posicion (<span id="unitPos">cm</span>)</div>
     <div class="ctx-row"><label style="color:var(--danger);font-weight:600">X</label><input type="number" id="propPx" step="1" onchange="setProp('pos','x',this.value)"></div>
     <div class="ctx-row"><label style="color:var(--success);font-weight:600">Y</label><input type="number" id="propPy" step="1" onchange="setProp('pos','y',this.value)"></div>
     <div class="ctx-row"><label style="color:var(--accent);font-weight:600">Z</label><input type="number" id="propPz" step="1" onchange="setProp('pos','z',this.value)"></div>
@@ -269,7 +287,7 @@
     </div>
   </div>
   <div class="ctx-section">
-    <div class="ctx-label">Tamaño exacto (mm)</div>
+    <div class="ctx-label">Tamaño exacto (<span id="unitSize">cm</span>)</div>
     <div class="ctx-row"><label style="color:var(--danger);font-weight:600">X</label><input type="number" id="propDx" step="1"></div>
     <div class="ctx-row"><label style="color:var(--success);font-weight:600">Y</label><input type="number" id="propDy" step="1"></div>
     <div class="ctx-row"><label style="color:var(--accent);font-weight:600">Z</label><input type="number" id="propDz" step="1"></div>
@@ -367,6 +385,14 @@ var wireframeMode = false;
 var undoStack = [];
 var redoStack = [];
 var pendingOp = null;
+var currentUnit = 'cm';
+var snapEnabled = false;
+var SNAP = 5;
+var dragSession = null;
+var dragPlane = new THREE.Plane();
+var groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+var cameraDirty = true;
+var gizmoDragging = false;
 
 // ========== UNDO / REDO ==========
 function snapshotObjects() {
@@ -477,17 +503,25 @@ function init() {
   try {
     transform = new THREE.TransformControls(camera, renderer.domElement);
     transform.setSize(1);
-    transform.addEventListener('dragging-changed', function(e) { if(orbit) orbit.enabled = !e.value; updateProperties(); if(!e.value) saveState(); });
+    transform.addEventListener('dragging-changed', function(e) { gizmoDragging = !!e.value; if(orbit) orbit.enabled = !e.value; updateProperties(); if(!e.value) saveState(); });
     transform.addEventListener('objectChange', function() { updateProperties(); });
     scene.add(transform.getHelper());
   } catch(e) { console.warn('TransformControls failed:', e); }
 
   renderer.domElement.addEventListener('pointerdown', onPointerDown);
+  renderer.domElement.addEventListener('pointermove', onPointerMove);
+  renderer.domElement.addEventListener('pointerup', onPointerUp);
+  renderer.domElement.addEventListener('pointerleave', onPointerUp);
+  if (orbit) orbit.addEventListener('change', function(){ cameraDirty = true; });
+  sizeRulers();
 
   window.addEventListener('resize', function() {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
+    if (orbit) orbit.update();
+    sizeRulers();
+    cameraDirty = true;
   });
 }
 
@@ -495,6 +529,7 @@ function animate() {
   requestAnimationFrame(animate);
   if (orbit) orbit.update();
   renderer.render(scene, camera);
+  if (cameraDirty) { drawRulers(); cameraDirty = false; }
 }
 
 // ========== GEOMETRY HELPER ==========
@@ -799,7 +834,7 @@ function replaceWith(newMesh) {
 // ========== LEFT CLICK - SELECTION ==========
 function onPointerDown(e) {
   if (e.button !== 0) return;
-  if (transform && transform.dragging) return;
+  if (gizmoDragging) return;
 
   var rect = renderer.domElement.getBoundingClientRect();
   var mouse = new THREE.Vector2(
@@ -822,13 +857,16 @@ function onPointerDown(e) {
     var hit = meshes.find(function(m){return m.mesh === intersects[0].object;});
     if (hit) {
       selectObject(hit.obj);
-      if (currentTool === 'move') { transform.setMode('translate'); transform.attach(hit.obj.mesh); }
-      else if (currentTool === 'rotate') { transform.setMode('rotate'); transform.attach(hit.obj.mesh); }
-      else if (currentTool === 'scale') { transform.setMode('scale'); transform.attach(hit.obj.mesh); }
+      if (currentTool === 'rotate') { if(transform) transform.setMode('rotate'); if(transform) transform.attach(hit.obj.mesh); }
+      else if (currentTool === 'scale') { if(transform) transform.setMode('scale'); if(transform) transform.attach(hit.obj.mesh); }
+      else {
+        if (transform) { transform.setMode('translate'); transform.attach(hit.obj.mesh); }
+        beginBodyDrag(hit.obj, intersects[0].point && intersects[0].point.clone());
+      }
     }
   } else {
     selectObject(null);
-    transform.detach();
+    if (transform) transform.detach();
   }
 }
 
@@ -853,6 +891,8 @@ function selectObject(obj) {
     }
   } else {
     if (transform) transform.detach();
+    var se = document.getElementById('statusObj');
+    if (se) se.textContent = '';
   }
   document.getElementById('ctxPanel').classList.toggle('open', !!obj);
   updateObjectList();
@@ -873,7 +913,193 @@ function setTool(tool) {
     else if (tool === 'rotate') { transform.setMode('rotate'); transform.attach(selectedObj.mesh); }
     else if (tool === 'scale') { transform.setMode('scale'); transform.attach(selectedObj.mesh); }
   }
-  setStatus(tool === 'select' ? 'Seleccionar: Click en objetos' : tool === 'move' ? 'Mover: Arrastra las flechas' : tool === 'rotate' ? 'Rotar: Arrastra los anillos' : 'Escalar: Arrastra los cubos');
+  setStatus(tool === 'select' ? 'Seleccionar: haz click o arrastra el objeto para moverlo' : tool === 'move' ? 'Mover: arrastra el objeto o los ejes del gizmo' : tool === 'rotate' ? 'Rotar: arrastra los anillos del gizmo' : 'Escalar: arrastra los cubos del gizmo');
+}
+
+// ========== DRAG DIRECTO ==========
+function beginBodyDrag(obj, hitPoint) {
+  dragSession = { obj: obj, y: hitPoint ? hitPoint.y : obj.mesh.position.y, moved: false };
+  dragPlane.setFromNormalAndCoplanarPoint(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, dragSession.y, 0));
+  if (orbit) orbit.enabled = false;
+  renderer.domElement.style.cursor = 'grabbing';
+}
+function pointerToDragPlane(e) {
+  var rect = renderer.domElement.getBoundingClientRect();
+  var v = new THREE.Vector2(
+    ((e.clientX - rect.left) / rect.width) * 2 - 1,
+    -((e.clientY - rect.top) / rect.height) * 2 + 1
+  );
+  var rc = new THREE.Raycaster(); rc.setFromCamera(v, camera);
+  var t = new THREE.Vector3();
+  return rc.ray.intersectPlane(dragPlane, t) ? t : null;
+}
+function onPointerMove(e) {
+  if (!dragSession) return;
+  if (gizmoDragging) { dragSession = null; return; }
+  var pt = pointerToDragPlane(e);
+  if (!pt) return;
+  var nx = pt.x, nz = pt.z;
+  if (snapEnabled) { nx = Math.round(nx / SNAP) * SNAP; nz = Math.round(nz / SNAP) * SNAP; }
+  if (nx !== dragSession.obj.mesh.position.x || nz !== dragSession.obj.mesh.position.z) {
+    dragSession.obj.mesh.position.x = nx;
+    dragSession.obj.mesh.position.z = nz;
+    dragSession.moved = true;
+    updateProperties();
+  }
+}
+function onPointerUp() {
+  if (!dragSession) return;
+  var moved = dragSession.moved;
+  dragSession = null;
+  renderer.domElement.style.cursor = '';
+  if (orbit) orbit.enabled = true;
+  if (moved) { saveState(); updateObjectList(); setStatus('Objeto movido'); }
+}
+
+// ========== UNIDADES ==========
+function unitFactor() { return currentUnit === 'cm' ? 10 : 1; }
+function dispVal(mm) { return (mm / unitFactor()).toFixed(1); }
+function mmFromDisp(v) { return (parseFloat(v) || 0) * unitFactor(); }
+function setUnit(u) {
+  currentUnit = u;
+  var p = document.getElementById('unitPos'), s = document.getElementById('unitSize');
+  if (p) p.textContent = u;
+  if (s) s.textContent = u;
+  updateProperties();
+  updateStatusInfo();
+  cameraDirty = true;
+  setStatus('Unidad: ' + u);
+}
+
+// ========== SNAP ==========
+function toggleSnap() {
+  snapEnabled = !snapEnabled;
+  var b = document.getElementById('tSnap');
+  if (b) b.classList.toggle('active', snapEnabled);
+  setStatus(snapEnabled ? 'Ajuste a cuadricula activado (' + SNAP + ' mm)' : 'Ajuste a cuadricula desactivado');
+}
+
+// ========== INFO EN BARRA DE ESTADO ==========
+function updateStatusInfo() {
+  var el = document.getElementById('statusObj'); if (!el) return;
+  if (selectedObj) {
+    var s = objWorldSize(selectedObj.mesh);
+    el.textContent = (selectedObj.locked ? '[Bloqueado] ' : '') + selectedObj.name + ' - ' + dispVal(s.x) + ' x ' + dispVal(s.y) + ' x ' + dispVal(s.z) + ' ' + currentUnit;
+  } else { el.textContent = ''; }
+}
+
+// ========== REGLAS (RULERS) EN CM ==========
+function sizeRulers() {
+  var t = document.getElementById('rulerTop'), l = document.getElementById('rulerLeft');
+  var dpr = Math.min(window.devicePixelRatio || 1, 2);
+  t.width = Math.floor(window.innerWidth * dpr); t.height = 26 * dpr;
+  l.width = 26 * dpr; l.height = Math.floor(window.innerHeight * dpr);
+}
+function rayToGround(sx, sy) {
+  var rect = renderer.domElement.getBoundingClientRect();
+  var v = new THREE.Vector2(
+    ((sx - rect.left) / rect.width) * 2 - 1,
+    -((sy - rect.top) / rect.height) * 2 + 1
+  );
+  var rc = new THREE.Raycaster(); rc.setFromCamera(v, camera);
+  var t = new THREE.Vector3();
+  return rc.ray.intersectPlane(groundPlane, t) ? t : null;
+}
+function pickRulerStep() {
+  var p1 = rayToGround(10, 13), p2 = rayToGround(130, 13);
+  if (!p1 || !p2) return 20;
+  var mmPerPx = Math.abs(p2.x - p1.x) / 120;
+  if (mmPerPx < 0.0001) return 1;
+  var target = mmPerPx * 60;
+  var steps = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000];
+  for (var i = 0; i < steps.length; i++) if (steps[i] >= target) return steps[i];
+  return 5000;
+}
+function tickScreen(samples, v) {
+  for (var i = 0; i < samples.length - 1; i++) {
+    var a = samples[i], b = samples[i + 1];
+    if ((a.v <= v && b.v >= v) || (a.v >= v && b.v <= v)) {
+      if (b.v === a.v) return a.s;
+      return a.s + (v - a.v) * (b.s - a.s) / (b.v - a.v);
+    }
+  }
+  return null;
+}
+function drawTicksX(ctx, samples, step, H) {
+  var labelStep = currentUnit === 'cm' ? step / 10 : step;
+  var minV = Infinity, maxV = -Infinity;
+  samples.forEach(function(sn){ if (sn.v < minV) minV = sn.v; if (sn.v > maxV) maxV = sn.v; });
+  if (!isFinite(minV)) return;
+  var first = Math.ceil(minV / (step / 5)) * (step / 5);
+  var last = Math.floor(maxV / (step / 5)) * (step / 5);
+  ctx.strokeStyle = 'rgba(255,255,255,.45)';
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '9px Inter, sans-serif';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (var v = first; v <= last; v += step / 5) {
+    var sx = tickScreen(samples, v);
+    if (sx === null) continue;
+    var major = (Math.abs(v) % step) < 0.0001;
+    if (major) { ctx.moveTo(sx + 0.5, H - 8); ctx.lineTo(sx + 0.5, H); }
+    else { ctx.moveTo(sx + 0.5, H - 3); ctx.lineTo(sx + 0.5, H); }
+    if (major && Math.abs(v) < 1) {
+      ctx.textAlign = 'center';
+      ctx.fillText('0', sx + 0.5, H - 10);
+    } else if (major) {
+      ctx.textAlign = 'center';
+      ctx.fillText(String(Math.round(v / step) * labelStep), sx + 0.5, H - 10);
+    }
+  }
+  ctx.stroke();
+}
+function drawTicksZ(ctx, samples, step, W) {
+  var labelStep = currentUnit === 'cm' ? step / 10 : step;
+  var minV = Infinity, maxV = -Infinity;
+  samples.forEach(function(sn){ if (sn.v < minV) minV = sn.v; if (sn.v > maxV) maxV = sn.v; });
+  if (!isFinite(minV)) return;
+  var first = Math.ceil(minV / (step / 5)) * (step / 5);
+  var last = Math.floor(maxV / (step / 5)) * (step / 5);
+  ctx.strokeStyle = 'rgba(255,255,255,.45)';
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '9px Inter, sans-serif';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (var v = first; v <= last; v += step / 5) {
+    var sy = tickScreen(samples, v);
+    if (sy === null) continue;
+    var major = (Math.abs(v) % step) < 0.0001;
+    if (major) { ctx.moveTo(W - 8, sy + 0.5); ctx.lineTo(W, sy + 0.5); }
+    else { ctx.moveTo(W - 3, sy + 0.5); ctx.lineTo(W, sy + 0.5); }
+    if (major) {
+      ctx.textAlign = 'left';
+      ctx.fillText(String(Math.round(v / step) * labelStep), 2, sy + 3);
+    }
+  }
+  ctx.stroke();
+}
+function drawRulers() {
+  if (!camera || !renderer) return;
+  camera.updateMatrixWorld();
+  var w = window.innerWidth, h = window.innerHeight;
+  var tctx = document.getElementById('rulerTop').getContext('2d');
+  var lctx = document.getElementById('rulerLeft').getContext('2d');
+  var dpr = Math.min(window.devicePixelRatio || 1, 2);
+  tctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  lctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  tctx.clearRect(0, 0, w, 26);
+  lctx.clearRect(0, 0, 26, h);
+  var step = pickRulerStep();
+  var sT = [], sL = [];
+  var x, p;
+  for (x = 0; x <= w; x += 6) { p = rayToGround(x, 13); if (p) sT.push({s: x, v: p.x}); }
+  for (x = 26; x <= h; x += 6) { p = rayToGround(13, x); if (p) sL.push({s: x, v: p.z}); }
+  drawTicksX(tctx, sT, step, 26);
+  drawTicksZ(lctx, sL, step, 26);
+  tctx.fillStyle = 'rgba(255,255,255,.25)';
+  tctx.font = '9px Inter, sans-serif';
+  tctx.textAlign = 'left';
+  tctx.fillText('0,0', 28, 10);
 }
 
 function setView(view) {
@@ -883,6 +1109,7 @@ function setView(view) {
   else if (view === 'right') { camera.position.set(d, 10, 0); if(orbit) orbit.target.set(0,10,0); }
   else if (view === 'iso') { camera.position.set(50, 40, 50); if(orbit) orbit.target.set(0,0,0); }
   if (orbit) orbit.update();
+  cameraDirty = true;
   setStatus('Vista: ' + view);
 }
 
@@ -904,6 +1131,7 @@ function focusCameraOn(obj) {
   var dist = maxDim * 2.5;
   camera.position.set(center.x + dist * 0.7, center.y + dist * 0.5, center.z + dist * 0.7);
   if(orbit) { orbit.target.copy(center); orbit.update(); }
+  cameraDirty = true;
 }
 
 function frameAll() {
@@ -916,6 +1144,7 @@ function frameAll() {
   var dist = maxDim * 2;
   camera.position.set(center.x + dist * 0.7, center.y + dist * 0.5, center.z + dist * 0.7);
   if(orbit) { orbit.target.copy(center); orbit.update(); }
+  cameraDirty = true;
 }
 
 // ========== GRID / WIREFRAME ==========
@@ -1095,9 +1324,9 @@ function updateProperties() {
   if (!selectedObj) return;
   var m = selectedObj.mesh;
   document.getElementById('propName').value = selectedObj.name;
-  document.getElementById('propPx').value = m.position.x.toFixed(1);
-  document.getElementById('propPy').value = m.position.y.toFixed(1);
-  document.getElementById('propPz').value = m.position.z.toFixed(1);
+  document.getElementById('propPx').value = dispVal(m.position.x);
+  document.getElementById('propPy').value = dispVal(m.position.y);
+  document.getElementById('propPz').value = dispVal(m.position.z);
   document.getElementById('propRx').value = Math.round(THREE.MathUtils.radToDeg(m.rotation.x));
   document.getElementById('propRy').value = Math.round(THREE.MathUtils.radToDeg(m.rotation.y));
   document.getElementById('propRz').value = Math.round(THREE.MathUtils.radToDeg(m.rotation.z));
@@ -1106,16 +1335,21 @@ function updateProperties() {
   document.getElementById('propSz').value = m.scale.z.toFixed(2);
   var color = objectColorOf(m);
   document.getElementById('propColor').value = color;
+  var sz = objWorldSize(m);
+  document.getElementById('propDx').value = dispVal(sz.x);
+  document.getElementById('propDy').value = dispVal(sz.y);
+  document.getElementById('propDz').value = dispVal(sz.z);
+  updateStatusInfo();
 }
 
 function setProp(type, axis, val) {
   if (!selectedObj) return;
   if (selectedObj.locked) { toast('Objeto bloqueado','warning'); return; }
   saveState();
-  var v = parseFloat(val);
-  if (type === 'pos') selectedObj.mesh.position[axis] = v;
-  else if (type === 'rot') selectedObj.mesh.rotation[axis] = THREE.MathUtils.degToRad(v);
-  else if (type === 'scl') selectedObj.mesh.scale[axis] = v;
+  if (type === 'pos') selectedObj.mesh.position[axis] = mmFromDisp(val);
+  else if (type === 'rot') { selectedObj.mesh.rotation[axis] = THREE.MathUtils.degToRad(parseFloat(val) || 0); updateStatusInfo(); }
+  else if (type === 'scl') { selectedObj.mesh.scale[axis] = parseFloat(val) || 0; }
+  updateStatusInfo();
 }
 
 function setColor(val) {
@@ -1154,23 +1388,25 @@ function scaleSelected(f) {
 function captureExactSize() {
   if (!selectedObj) return;
   var s = objWorldSize(selectedObj.mesh);
-  document.getElementById('propDx').value = s.x.toFixed(1);
-  document.getElementById('propDy').value = s.y.toFixed(1);
-  document.getElementById('propDz').value = s.z.toFixed(1);
+  document.getElementById('propDx').value = dispVal(s.x);
+  document.getElementById('propDy').value = dispVal(s.y);
+  document.getElementById('propDz').value = dispVal(s.z);
 }
 function applyExactSize() {
   if (!selectedObj) { toast('Selecciona un objeto','warning'); return; }
   if (selectedObj.locked) { toast('Objeto bloqueado','warning'); return; }
-  var tx = parseFloat(document.getElementById('propDx').value);
-  var ty = parseFloat(document.getElementById('propDy').value);
-  var tz = parseFloat(document.getElementById('propDz').value);
+  var tx = mmFromDisp(document.getElementById('propDx').value);
+  var ty = mmFromDisp(document.getElementById('propDy').value);
+  var tz = mmFromDisp(document.getElementById('propDz').value);
   if (!isFinite(tx) || !isFinite(ty) || !isFinite(tz) || tx <= 0 || ty <= 0 || tz <= 0) { toast('Valores invalidos','warning'); return; }
   var cur = objWorldSize(selectedObj.mesh);
+  if (cur.x <= 0 || cur.y <= 0 || cur.z <= 0) { toast('Tamaño actual no disponible','warning'); return; }
   saveState();
   selectedObj.mesh.scale.x *= (tx / cur.x);
   selectedObj.mesh.scale.y *= (ty / cur.y);
   selectedObj.mesh.scale.z *= (tz / cur.z);
   updateProperties();
+  updateStatusInfo();
   toast('Tamaño exacto aplicado','success');
 }
 function opRotate90(axis) {
@@ -1777,6 +2013,8 @@ window.addEventListener('keydown', function(e) {
   else if (e.key==='f'||e.key==='F') frameAll();
   else if (e.key==='l'||e.key==='L') toggleObjList();
   else if (e.key==='g'||e.key==='G') opAlignGround();
+  else if (e.key==='n'||e.key==='N') toggleSnap();
+  else if (e.key==='u'||e.key==='U') { setUnit(currentUnit === 'cm' ? 'mm' : 'cm'); if (document.getElementById('unitSel')) document.getElementById('unitSel').value = currentUnit; }
   else if (e.key==='Escape') { selectObject(null); setTool('select'); document.getElementById('shapeStrip').classList.remove('open'); }
   else if (e.key==='='||e.key==='+') zoomIn();
   else if (e.key==='-') zoomOut();
