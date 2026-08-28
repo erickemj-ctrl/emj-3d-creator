@@ -76,6 +76,37 @@
     .ctx-btn.danger { color:var(--danger); border-color:rgba(255,59,48,.3); }
     .ctx-btn.danger:hover { background:rgba(255,59,48,.08); }
 
+    .opts-row { display:flex; gap:4px; margin-bottom:4px; }
+    .opts-row .ctx-btn { flex:1; padding:5px 4px; font-size:9px; white-space:nowrap; }
+    .opts-row .ctx-btn i { margin-right:3px; }
+    .opts-row input[type=number] {
+      flex:1; min-width:0; padding:5px 6px; border:1px solid var(--border); border-radius:6px;
+      font-size:11px; background:var(--bg); color:var(--t1); outline:none;
+    }
+    .opts-row input[type=number]:focus { border-color:var(--accent); }
+
+    .list-panel {
+      position:absolute; z-index:14; left:12px; top:96px; width:260px; max-height:55vh;
+      display:none; flex-direction:column;
+      background:var(--panel-bg); backdrop-filter:var(--panel-blur); -webkit-backdrop-filter:var(--panel-blur);
+      border:1px solid var(--border); border-radius:14px;
+      box-shadow:0 8px 32px rgba(0,0,0,.12); overflow:hidden;
+    }
+    .list-header { display:flex; align-items:center; gap:6px; padding:8px 10px; border-bottom:1px solid var(--border); }
+    .list-title { font-size:12px; font-weight:600; flex:1; display:flex; align-items:center; gap:6px; }
+    .list-count { font-size:9px; color:var(--t3); max-width:120px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+    .list-tools { display:flex; gap:2px; }
+    .lmini { width:24px; height:24px; border:none; background:transparent; color:var(--t2); border-radius:6px; cursor:pointer; font-size:11px; }
+    .lmini:hover { background:var(--bg3); color:var(--t1); }
+    .list-body { overflow-y:auto; padding:4px; display:flex; flex-direction:column; gap:2px; }
+    .lrow { display:flex; align-items:center; gap:6px; padding:4px 6px; border-radius:8px; cursor:pointer; font-size:11px; transition:background .1s; }
+    .lrow:hover { background:var(--bg3); }
+    .lrow.selected { background:rgba(0,113,227,.15); }
+    .ldot { width:10px; height:10px; border-radius:3px; flex-shrink:0; border:1px solid rgba(0,0,0,.15); }
+    .lname { flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:var(--t1); }
+    .lbtn { width:22px; height:22px; border:none; background:transparent; border-radius:5px; cursor:pointer; font-size:10px; color:var(--t2); flex-shrink:0; display:flex; align-items:center; justify-content:center; }
+    .lbtn:hover { background:var(--bg2); }
+
     .ai-panel {
       position:absolute; z-index:20; right:12px; top:12px; bottom:12px; width:340px;
       background:var(--panel-bg); backdrop-filter:var(--panel-blur); -webkit-backdrop-filter:var(--panel-blur);
@@ -152,6 +183,8 @@
   <button class="fbtn" onclick="toggleWireframe()" id="tWire" title="Modo alambre"><i class="fas fa-vector-square"></i><span>Alambre</span></button>
   <button class="fbtn" onclick="frameAll()" title="Enfocar todo (F)"><i class="fas fa-compress-arrows-alt"></i><span>Enfocar</span></button>
   <div class="fsep"></div>
+  <button class="fbtn" onclick="toggleObjList()" id="tList" title="Lista de objetos (L)"><i class="fas fa-layer-group"></i><span>Lista</span></button>
+  <div class="fsep"></div>
   <button class="fbtn" onclick="undo()" id="tUndo" title="Deshacer (Ctrl+Z)"><i class="fas fa-undo"></i><span>Deshacer</span></button>
   <button class="fbtn" onclick="redo()" id="tRedo" title="Rehacer (Ctrl+Y)"><i class="fas fa-redo"></i><span>Rehacer</span></button>
 </div>
@@ -226,10 +259,70 @@
     <div class="ctx-label">Color</div>
     <div class="ctx-row"><input type="color" id="propColor" onchange="setColor(this.value)"></div>
   </div>
+  <div class="ctx-section">
+    <div class="ctx-label">Escala rapida</div>
+    <div class="opts-row">
+      <button class="ctx-btn" onclick="scaleSelected(1.1)" title="Agrandar 10%"><i class="fas fa-search-plus"></i>+10%</button>
+      <button class="ctx-btn" onclick="scaleSelected(0.9)" title="Achicar 10%"><i class="fas fa-search-minus"></i>-10%</button>
+      <button class="ctx-btn" onclick="scaleSelected(1.5)" title="Agrandar 50%"><i class="fas fa-expand"></i>+50%</button>
+      <button class="ctx-btn" onclick="scaleSelected(0.5)" title="Reducir a la mitad"><i class="fas fa-compress"></i>/2</button>
+    </div>
+  </div>
+  <div class="ctx-section">
+    <div class="ctx-label">Tamaño exacto (mm)</div>
+    <div class="ctx-row"><label style="color:var(--danger);font-weight:600">X</label><input type="number" id="propDx" step="1"></div>
+    <div class="ctx-row"><label style="color:var(--success);font-weight:600">Y</label><input type="number" id="propDy" step="1"></div>
+    <div class="ctx-row"><label style="color:var(--accent);font-weight:600">Z</label><input type="number" id="propDz" step="1"></div>
+    <div class="ctx-actions">
+      <button class="ctx-btn" onclick="captureExactSize()" title="Tomar tamaño actual"><i class="fas fa-arrows-alt"></i> Tomar</button>
+      <button class="ctx-btn" onclick="applyExactSize()" title="Aplicar tamaño"><i class="fas fa-check"></i> Aplicar</button>
+    </div>
+  </div>
+  <div class="ctx-section">
+    <div class="ctx-label">Operaciones</div>
+    <div class="opts-row">
+      <button class="ctx-btn" onclick="opHollow()" title="Convertir en hueco (cubo/cilindro/estrella)"><i class="fas fa-border-none"></i>Hueco</button>
+      <button class="ctx-btn" onclick="opRound()" title="Redondear esquinas"><i class="fas fa-circle"></i>Redon.</button>
+      <button class="ctx-btn" onclick="opChamfer()" title="Biselar esquinas (esquineros)"><i class="fas fa-square-full"></i>Chaf.</button>
+    </div>
+    <div class="opts-row" id="opParamRow" style="display:none">
+      <label id="opParamLabel" style="font-size:10px;color:var(--t2);white-space:nowrap;margin-right:2px;">Grosor</label>
+      <input type="number" id="opParamVal" step="0.5" min="0.1">
+      <button class="ctx-btn" onclick="opApplyParam()" style="flex:0 0 auto"><i class="fas fa-check"></i></button>
+    </div>
+    <div class="opts-row">
+      <button class="ctx-btn" onclick="opMirror('x')" title="Espejo en X"><i class="fas fa-arrows-alt-h"></i>Esp.X</button>
+      <button class="ctx-btn" onclick="opMirror('y')" title="Espejo en Y"><i class="fas fa-arrows-alt-v"></i>Esp.Y</button>
+      <button class="ctx-btn" onclick="opMirror('z')" title="Espejo en Z"><i class="fas fa-arrows-alt"></i>Esp.Z</button>
+    </div>
+    <div class="opts-row">
+      <button class="ctx-btn" onclick="opRotate90('x')" title="Girar 90° en X"><i class="fas fa-undo"></i>90°X</button>
+      <button class="ctx-btn" onclick="opRotate90('y')" title="Girar 90° en Y"><i class="fas fa-undo"></i>90°Y</button>
+      <button class="ctx-btn" onclick="opRotate90('z')" title="Girar 90° en Z"><i class="fas fa-undo"></i>90°Z</button>
+    </div>
+    <div class="opts-row">
+      <button class="ctx-btn" onclick="opAlignGround()" title="Apoyar en el suelo"><i class="fas fa-arrow-down"></i>Suelo</button>
+      <button class="ctx-btn" onclick="opCenter()" title="Centrar pivote del objeto"><i class="fas fa-crosshairs"></i>Pivote</button>
+      <button class="ctx-btn" onclick="opBake()" title="Convertir a malla unica"><i class="fas fa-object-ungroup"></i>Malla</button>
+    </div>
+  </div>
   <div class="ctx-actions">
     <button class="ctx-btn" onclick="duplicateSelected()"><i class="fas fa-clone"></i> Duplicar</button>
     <button class="ctx-btn danger" onclick="deleteSelected()"><i class="fas fa-trash"></i> Borrar</button>
   </div>
+</div>
+
+<div class="list-panel" id="listPanel">
+  <div class="list-header">
+    <span class="list-title"><i class="fas fa-layer-group"></i> Objetos</span>
+    <span id="listStat" class="list-count"></span>
+    <div class="list-tools">
+      <button class="lmini" onclick="listShowAll()" title="Mostrar todos"><i class="fas fa-eye"></i></button>
+      <button class="lmini" onclick="listUnlockAll()" title="Desbloquear todos"><i class="fas fa-lock-open"></i></button>
+      <button class="lmini" onclick="toggleObjList()" title="Cerrar lista"><i class="fas fa-times"></i></button>
+    </div>
+  </div>
+  <div class="list-body" id="listBody"></div>
 </div>
 
 <div class="ai-panel" id="aiPanel">
@@ -273,41 +366,38 @@ var showGrid = true;
 var wireframeMode = false;
 var undoStack = [];
 var redoStack = [];
+var pendingOp = null;
 
 // ========== UNDO / REDO ==========
-function saveState() {
-  undoStack.push(sceneObjects.map(function(o) {
-    return { name:o.name, type:o.type, shapeType:o.shapeType, params:o.params, partType:o.partType,
+function snapshotObjects() {
+  return sceneObjects.map(function(o) {
+    var st = {
+      name:o.name, type:o.type, shapeType:o.shapeType, params:o.params, partType:o.partType,
+      custom:o.custom ? true : false, locked:o.locked ? true : false, visible:o.visible !== false,
       pos:{x:o.mesh.position.x,y:o.mesh.position.y,z:o.mesh.position.z},
       rot:{x:o.mesh.rotation.x,y:o.mesh.rotation.y,z:o.mesh.rotation.z},
       scl:{x:o.mesh.scale.x,y:o.mesh.scale.y,z:o.mesh.scale.z}
     };
-  }));
+    var needsSnap = (o.custom || o.type === 'stl' || !o.shapeType) && !o.partType;
+    if (needsSnap) st.snap = { tri: localTriangles(o.mesh), color: objectColorOf(o.mesh) };
+    return st;
+  });
+}
+function saveState() {
+  undoStack.push(snapshotObjects());
   redoStack = [];
   if (undoStack.length > 50) undoStack.shift();
 }
 function undo() {
   if (!undoStack.length) { toast('Nada que deshacer','info'); return; }
-  redoStack.push(sceneObjects.map(function(o) {
-    return { name:o.name, type:o.type, shapeType:o.shapeType, params:o.params, partType:o.partType,
-      pos:{x:o.mesh.position.x,y:o.mesh.position.y,z:o.mesh.position.z},
-      rot:{x:o.mesh.rotation.x,y:o.mesh.rotation.y,z:o.mesh.rotation.z},
-      scl:{x:o.mesh.scale.x,y:o.mesh.scale.y,z:o.mesh.scale.z}
-    };
-  }));
+  redoStack.push(snapshotObjects());
   var state = undoStack.pop();
   restoreState(state);
   toast('Deshacer','info');
 }
 function redo() {
   if (!redoStack.length) { toast('Nada que rehacer','info'); return; }
-  undoStack.push(sceneObjects.map(function(o) {
-    return { name:o.name, type:o.type, shapeType:o.shapeType, params:o.params, partType:o.partType,
-      pos:{x:o.mesh.position.x,y:o.mesh.position.y,z:o.mesh.position.z},
-      rot:{x:o.mesh.rotation.x,y:o.mesh.rotation.y,z:o.mesh.rotation.z},
-      scl:{x:o.mesh.scale.x,y:o.mesh.scale.y,z:o.mesh.scale.z}
-    };
-  }));
+  undoStack.push(snapshotObjects());
   var state = redoStack.pop();
   restoreState(state);
   toast('Rehacer','info');
@@ -317,11 +407,16 @@ function restoreState(state) {
   sceneObjects = [];
   state.forEach(function(s) {
     var mesh;
-    if (s.shapeType) {
+    if (s.snap) {
+      var g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(s.snap.tri, 3));
+      g.computeVertexNormals();
+      var col = typeof s.snap.color === 'string' ? parseInt(s.snap.color.replace('#',''),16) : 0x0071e3;
+      mesh = new THREE.Mesh(g, stdMat(col));
+    } else if (s.shapeType) {
       mesh = createGeometry(s.shapeType, s.params || []);
     } else if (s.partType) {
-      addPartSilent(s.partType);
-      return;
+      mesh = createPartMesh(s.partType);
     } else {
       mesh = createGeometry('box', [10,10,10]);
     }
@@ -329,8 +424,9 @@ function restoreState(state) {
     mesh.rotation.set(s.rot.x, s.rot.y, s.rot.z);
     mesh.scale.set(s.scl.x, s.scl.y, s.scl.z);
     mesh.castShadow = true; mesh.receiveShadow = true;
+    mesh.visible = s.visible !== false;
     scene.add(mesh);
-    sceneObjects.push({ name:s.name, mesh:mesh, type:s.type, shapeType:s.shapeType, params:s.params, partType:s.partType });
+    sceneObjects.push({ name:s.name || ('Obj_' + (sceneObjects.length + 1)), mesh:mesh, type:s.type || 'primitive', shapeType:s.shapeType, params:s.params, partType:s.partType, locked:!!s.locked, visible:s.visible !== false, custom:!!s.custom });
   });
   selectObject(null);
   updateObjectList();
@@ -381,7 +477,7 @@ function init() {
   try {
     transform = new THREE.TransformControls(camera, renderer.domElement);
     transform.setSize(1);
-    transform.addEventListener('dragging-changed', function(e) { if(orbit) orbit.enabled = !e.value; });
+    transform.addEventListener('dragging-changed', function(e) { if(orbit) orbit.enabled = !e.value; updateProperties(); if(!e.value) saveState(); });
     transform.addEventListener('objectChange', function() { updateProperties(); });
     scene.add(transform.getHelper());
   } catch(e) { console.warn('TransformControls failed:', e); }
@@ -433,6 +529,273 @@ function createGeometry(type, params) {
   return mesh;
 }
 
+// ========== GEOMETRY BUILDERS FOR OPERATIONS ==========
+function stdMat(color) {
+  return new THREE.MeshStandardMaterial({ color: color || 0x0071e3, metalness:0.05, roughness:0.6, side:THREE.DoubleSide });
+}
+function objectColorOf(mesh) {
+  var col = '#888888';
+  if (mesh.isMesh && mesh.material && mesh.material.color) { col = '#' + mesh.material.color.getHexString(); }
+  else if (mesh.isGroup) {
+    mesh.traverse(function(c){ if (c.isMesh && c.material && c.material.color && col === '#888888') col = '#' + c.material.color.getHexString(); });
+  }
+  return col;
+}
+function applyColor(mesh, val) {
+  if (mesh.isMesh && mesh.material) mesh.material.color.set(val);
+  else if (mesh.isGroup) mesh.traverse(function(c){ if (c.isMesh && c.material && c.material.color) c.material.color.set(val); });
+}
+function deIndex(g) {
+  var idx = g.getIndex();
+  if (!idx) return;
+  var pos = g.getAttribute('position');
+  var norm = g.getAttribute('normal');
+  var uv = g.getAttribute('uv');
+  var np = new Float32Array(idx.count * 3);
+  var nn = norm ? new Float32Array(idx.count * 3) : null;
+  var nu = uv ? new Float32Array(idx.count * 2) : null;
+  for (var i = 0; i < idx.count; i++) {
+    var vi = idx.getX(i);
+    np[i*3]=pos.getX(vi); np[i*3+1]=pos.getY(vi); np[i*3+2]=pos.getZ(vi);
+    if (norm) { nn[i*3]=norm.getX(vi); nn[i*3+1]=norm.getY(vi); nn[i*3+2]=norm.getZ(vi); }
+    if (uv) { nu[i*2]=uv.getX(vi); nu[i*2+1]=uv.getY(vi); }
+  }
+  g.setAttribute('position', new THREE.BufferAttribute(np,3));
+  if (norm) g.setAttribute('normal', new THREE.BufferAttribute(nn,3));
+  if (uv) g.setAttribute('uv', new THREE.BufferAttribute(nu,2));
+  g.setIndex(null);
+}
+function localTriangles(mesh) {
+  var pos = [];
+  var entries = [];
+  if (mesh.isMesh) { entries.push({ m: mesh, mat: new THREE.Matrix4() }); }
+  else if (mesh.isGroup) {
+    mesh.updateMatrixWorld(true);
+    var inv = new THREE.Matrix4().getInverse(mesh.matrixWorld);
+    mesh.traverse(function(c){ if (c.isMesh) entries.push({ m: c, mat: c.matrixWorld.clone().multiply(inv) }); });
+  }
+  entries.forEach(function(e){
+    var g = e.m.geometry.clone();
+    g.applyMatrix4(e.mat);
+    deIndex(g);
+    var p = g.getAttribute('position');
+    for (var i = 0; i < p.count; i++) pos.push(p.getX(i), p.getY(i), p.getZ(i));
+    g.dispose();
+  });
+  return pos;
+}
+function mergeGeometries(geos, matrices) {
+  var pos = [];
+  geos.forEach(function(g, i) {
+    deIndex(g);
+    var p = g.getAttribute('position');
+    var v = new THREE.Vector3();
+    var m = (matrices && matrices[i]) ? matrices[i] : new THREE.Matrix4();
+    for (var j = 0; j < p.count; j++) {
+      v.set(p.getX(j), p.getY(j), p.getZ(j)).applyMatrix4(m);
+      pos.push(v.x, v.y, v.z);
+    }
+  });
+  var out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  out.computeVertexNormals();
+  return out;
+}
+function deepCloneMesh(mesh) {
+  if (mesh.isGroup) {
+    var g = new THREE.Group();
+    mesh.children.forEach(function(c){
+      var cc = c.clone();
+      if (cc.isMesh) {
+        if (cc.material) cc.material = c.material.clone();
+        if (cc.geometry) cc.geometry = c.geometry.clone();
+      }
+      g.add(cc);
+    });
+    g.position.copy(mesh.position);
+    g.rotation.copy(mesh.rotation);
+    g.scale.copy(mesh.scale);
+    g.visible = mesh.visible !== false;
+    return g;
+  }
+  var m = mesh.clone();
+  if (m.material) m.material = mesh.material.clone();
+  if (m.geometry) m.geometry = mesh.geometry.clone();
+  m.visible = mesh.visible !== false;
+  return m;
+}
+function buildHollowBox(w, h, d, t) {
+  t = Math.max(0.1, Math.min(t, Math.min(w, h, d) / 3));
+  var g = new THREE.Group();
+  var mat = stdMat();
+  function panel(sx, sy, sz, px, py, pz) {
+    var m = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), mat);
+    m.position.set(px, py, pz);
+    g.add(m);
+  }
+  panel(w, t, d, 0, h/2 - t/2, 0);
+  panel(w, t, d, 0, -h/2 + t/2, 0);
+  panel(w, h - 2*t, t, 0, 0, d/2 - t/2);
+  panel(w, h - 2*t, t, 0, 0, -d/2 + t/2);
+  panel(t, h - 2*t, d - 2*t, w/2 - t/2, 0, 0);
+  panel(t, h - 2*t, d - 2*t, -w/2 + t/2, 0, 0);
+  return g;
+}
+function annulusExtrude(outerR, innerR, h, seg) {
+  var shape = new THREE.Shape();
+  shape.absarc(0, 0, outerR, 0, Math.PI * 2, false);
+  var hole = new THREE.Path();
+  hole.absarc(0, 0, innerR, 0, Math.PI * 2, true);
+  shape.holes.push(hole);
+  var geo = new THREE.ExtrudeGeometry(shape, { depth: h, bevelEnabled: false, curveSegments: seg || 48 });
+  geo.rotateX(-Math.PI / 2);
+  geo.translate(0, -h / 2, 0);
+  return geo;
+}
+function buildHollowCyl(r, h, t) {
+  t = Math.max(0.1, Math.min(t, Math.max(0, r - 0.1)));
+  var mesh = new THREE.Mesh(annulusExtrude(r, Math.max(0.05, r - t), h, 48), stdMat());
+  mesh.castShadow = true; mesh.receiveShadow = true;
+  return mesh;
+}
+function starPolygon(pts, r1, r2) {
+  var arr = [];
+  for (var i = 0; i < pts * 2; i++) {
+    var r = i % 2 === 0 ? r1 : r2;
+    var a = i * Math.PI / pts - Math.PI / 2;
+    arr.push(new THREE.Vector2(Math.cos(a) * r, Math.sin(a) * r));
+  }
+  return arr;
+}
+function starShape(pts, r1, r2) {
+  var arr = starPolygon(pts, r1, r2);
+  var s = new THREE.Shape();
+  s.moveTo(arr[0].x, arr[0].y);
+  for (var i = 1; i < arr.length; i++) s.lineTo(arr[i].x, arr[i].y);
+  s.closePath();
+  return s;
+}
+function buildHollowStarGeo(oR, iR, pts, depth, t) {
+  var k = Math.max(0.02, (oR - t) / oR);
+  var shape = starShape(pts, oR, iR);
+  var holeA = starPolygon(pts, oR * k, iR * k);
+  var hp = new THREE.Path();
+  hp.moveTo(holeA[0].x, holeA[0].y);
+  for (var j = 1; j < holeA.length; j++) hp.lineTo(holeA[j].x, holeA[j].y);
+  hp.closePath();
+  shape.holes.push(hp);
+  var geo = new THREE.ExtrudeGeometry(shape, { depth: depth, bevelEnabled: false });
+  geo.translate(0, 0, -depth / 2);
+  var mesh = new THREE.Mesh(geo, stdMat());
+  mesh.castShadow = true; mesh.receiveShadow = true;
+  return mesh;
+}
+function buildRoundedBox(w, h, d, r) {
+  r = Math.max(0.1, Math.min(r, Math.min(w, h, d) / 2 - 0.05));
+  if (w - 2*r <= 0.01 || h - 2*r <= 0.01 || d - 2*r <= 0.01) r = Math.min(w, h, d) / 4;
+  var g = new THREE.Group();
+  var mat = stdMat();
+  var cx = w/2 - r, cy = h/2 - r, cz = d/2 - r;
+  function addBox(sx, sy, sz, px, py, pz) {
+    var m = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), mat);
+    m.position.set(px, py, pz); g.add(m);
+  }
+  function addCyl(axis, len, px, py, pz) {
+    var m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, 32), mat);
+    if (axis === 'x') m.rotation.z = Math.PI / 2;
+    else if (axis === 'z') m.rotation.x = Math.PI / 2;
+    m.position.set(px, py, pz); g.add(m);
+  }
+  function addSphere(px, py, pz) {
+    var m = new THREE.Mesh(new THREE.SphereGeometry(r, 24, 24), mat);
+    m.position.set(px, py, pz); g.add(m);
+  }
+  addBox(w - 2*r, h - 2*r, d - 2*r, 0, 0, 0);
+  addBox(w - 2*r, h - 2*r, r, 0, 0, d/2 - r/2);
+  addBox(w - 2*r, h - 2*r, r, 0, 0, -d/2 + r/2);
+  addBox(w - 2*r, r, d - 2*r, 0, h/2 - r/2, 0);
+  addBox(w - 2*r, r, d - 2*r, 0, -h/2 + r/2, 0);
+  addBox(r, h - 2*r, d - 2*r, w/2 - r/2, 0, 0);
+  addBox(r, h - 2*r, d - 2*r, -w/2 + r/2, 0, 0);
+  addCyl('x', w - 2*r, 0, cy, cz); addCyl('x', w - 2*r, 0, cy, -cz);
+  addCyl('x', w - 2*r, 0, -cy, cz); addCyl('x', w - 2*r, 0, -cy, -cz);
+  addCyl('y', h - 2*r, cx, 0, cz); addCyl('y', h - 2*r, -cx, 0, cz);
+  addCyl('y', h - 2*r, cx, 0, -cz); addCyl('y', h - 2*r, -cx, 0, -cz);
+  addCyl('z', d - 2*r, cx, cy, 0); addCyl('z', d - 2*r, -cx, cy, 0);
+  addCyl('z', d - 2*r, cx, -cy, 0); addCyl('z', d - 2*r, -cx, -cy, 0);
+  addSphere(cx, cy, cz); addSphere(-cx, cy, cz); addSphere(cx, -cy, cz); addSphere(cx, cy, -cz);
+  addSphere(-cx, -cy, cz); addSphere(-cx, cy, -cz); addSphere(cx, -cy, -cz); addSphere(-cx, -cy, -cz);
+  return g;
+}
+function buildRoundCyl(baseR, h, r) {
+  r = Math.max(0.1, Math.min(r, baseR * 0.45, h / 2 - 0.05));
+  var g = new THREE.Group();
+  var mat = stdMat();
+  var inner = baseR - r;
+  var body = new THREE.Mesh(new THREE.CylinderGeometry(inner, inner, h, 48), mat);
+  g.add(body);
+  var ring = new THREE.TorusGeometry(inner, r, 16, 48);
+  var t1 = new THREE.Mesh(ring, mat); t1.position.y = h/2; g.add(t1);
+  var t2 = new THREE.Mesh(ring.clone(), mat); t2.position.y = -h/2; g.add(t2);
+  return g;
+}
+function rectChamferShape(rw, rh, c) {
+  var s = new THREE.Shape();
+  var xw = rw / 2, yh = rh / 2;
+  c = Math.max(0, Math.min(c, xw - 0.05, yh - 0.05));
+  s.moveTo(-xw + c, -yh);
+  s.lineTo(xw - c, -yh);
+  s.lineTo(xw, -yh + c);
+  s.lineTo(xw, yh - c);
+  s.lineTo(xw - c, yh);
+  s.lineTo(-xw + c, yh);
+  s.lineTo(-xw, yh - c);
+  s.lineTo(-xw, -yh + c);
+  s.closePath();
+  return s;
+}
+function buildChamferBox(w, h, d, f) {
+  var g = new THREE.Group();
+  var mat = stdMat();
+  var fmax = Math.min(w, h, d) / 3;
+  f = Math.max(0.1, Math.min(f, fmax));
+  function plate(shape, len, axis) {
+    var geo = new THREE.ExtrudeGeometry(shape, { depth: len, bevelEnabled: false });
+    geo.translate(0, 0, -len / 2);
+    var m = new THREE.Mesh(geo, mat);
+    if (axis === 'x') m.rotation.y = -Math.PI / 2;
+    else if (axis === 'y') m.rotation.x = Math.PI / 2;
+    g.add(m);
+  }
+  plate(rectChamferShape(d, h, f), w, 'x');
+  plate(rectChamferShape(w, d, f), h, 'y');
+  plate(rectChamferShape(w, h, f), d, 'z');
+  return g;
+}
+function replaceWith(newMesh) {
+  var o = selectedObj;
+  var center = new THREE.Vector3();
+  new THREE.Box3().setFromObject(o.mesh).getCenter(center);
+  var rot = o.mesh.rotation.clone();
+  if (transform) transform.detach();
+  scene.remove(o.mesh);
+  scene.add(newMesh);
+  var off = new THREE.Vector3();
+  new THREE.Box3().setFromObject(newMesh).getCenter(off);
+  newMesh.position.copy(center).sub(off);
+  newMesh.rotation.copy(rot);
+  newMesh.scale.set(1, 1, 1);
+  newMesh.castShadow = true; newMesh.receiveShadow = true;
+  o.mesh = newMesh;
+  o.custom = true;
+  o.type = 'custom';
+  o.shapeType = null;
+  o.partType = null;
+  selectObject(o);
+  updateProperties();
+  updateObjectList();
+}
+
 // ========== LEFT CLICK - SELECTION ==========
 function onPointerDown(e) {
   if (e.button !== 0) return;
@@ -448,6 +811,7 @@ function onPointerDown(e) {
 
   var meshes = [];
   sceneObjects.forEach(function(o) {
+    if (o.visible === false || o.locked) return;
     if (o.mesh.isGroup) { o.mesh.traverse(function(c) { if (c.isMesh) meshes.push({obj:o, mesh:c}); }); }
     else if (o.mesh.isMesh) { meshes.push({obj:o, mesh:o.mesh}); }
   });
@@ -480,9 +844,13 @@ function selectObject(obj) {
     var m = obj.mesh;
     if (m.isMesh && m.material.emissive) m.material.emissive.setHex(0x333333);
     else if (m.isGroup) m.traverse(function(c){if(c.isMesh&&c.material.emissive)c.material.emissive.setHex(0x333333);});
-    if (currentTool === 'move' && transform) { transform.setMode('translate'); transform.attach(m); }
-    else if (currentTool === 'rotate' && transform) { transform.setMode('rotate'); transform.attach(m); }
-    else if (currentTool === 'scale' && transform) { transform.setMode('scale'); transform.attach(m); }
+    if (transform) {
+      if (obj.locked) { transform.detach(); }
+      else if (currentTool === 'move') { transform.setMode('translate'); transform.attach(m); }
+      else if (currentTool === 'rotate') { transform.setMode('rotate'); transform.attach(m); }
+      else if (currentTool === 'scale') { transform.setMode('scale'); transform.attach(m); }
+      else { transform.setMode('translate'); transform.attach(m); }
+    }
   } else {
     if (transform) transform.detach();
   }
@@ -585,10 +953,13 @@ function quickShape(type) {
 
   saveState();
   var mesh = createGeometry(type, params);
+  var spot = nextSpot();
+  mesh.position.x = spot.x; mesh.position.z = spot.z;
   var name = names[type] + '_' + (sceneObjects.length + 1);
   scene.add(mesh);
   var obj = { name:name, mesh:mesh, type:'primitive', shapeType:type, params:params };
   sceneObjects.push(obj);
+  setTool('move');
   selectObject(obj);
   updateObjectList();
   focusCameraOn(mesh);
@@ -597,9 +968,12 @@ function quickShape(type) {
 }
 
 // ========== PRE-MADE PARTS ==========
-function addPartSilent(type) {
-  var mesh, name;
-  var mat = new THREE.MeshStandardMaterial({ color:0x888888, metalness:0.7, roughness:0.3 });
+function buildPartMaterial(color) {
+  return new THREE.MeshStandardMaterial({ color:color, metalness:0.7, roughness:0.3 });
+}
+function createPartMesh(type) {
+  var mesh;
+  var mat = buildPartMaterial(0x888888);
 
   if (type === 'screw_m3' || type === 'screw_m4') {
     var r = type === 'screw_m3' ? 1.5 : 2;
@@ -609,7 +983,7 @@ function addPartSilent(type) {
     shaft.position.y = l/2; group.add(shaft);
     var head = new THREE.Mesh(new THREE.CylinderGeometry(r*1.8,r*1.8,2,16), mat);
     head.position.y = l+1; group.add(head);
-    mesh = group; name = type === 'screw_m3' ? 'Tornillo M3' : 'Tornillo M4';
+    mesh = group;
   } else if (type === 'nut_m3' || type === 'nut_m4') {
     var nr = type === 'nut_m3' ? 3.2 : 4;
     var shape = new THREE.Shape();
@@ -618,24 +992,23 @@ function addPartSilent(type) {
     var hole = new THREE.Path(); hole.absarc(0,0,nr/2,0,Math.PI*2,false); shape.holes.push(hole);
     var geo = new THREE.ExtrudeGeometry(shape,{depth:2.4,bevelEnabled:false});
     geo.rotateX(-Math.PI/2);
-    mesh = new THREE.Mesh(geo,mat); name = type==='nut_m3'?'Tuerca M3':'Tuerca M4';
+    mesh = new THREE.Mesh(geo,mat);
   } else if (type === 'bracket90') {
     var group = new THREE.Group();
     var p1 = new THREE.Mesh(new THREE.BoxGeometry(30,15,3),mat); p1.position.set(0,7.5,0); group.add(p1);
     var p2 = new THREE.Mesh(new THREE.BoxGeometry(30,15,3),mat); p2.rotation.z=-Math.PI/2; p2.position.set(0,15,0); group.add(p2);
-    mesh = group; name = 'Bracket 90';
+    mesh = group;
   } else if (type === 'clip') {
     mesh = new THREE.Mesh(new THREE.BoxGeometry(15,2,10), new THREE.MeshStandardMaterial({color:0x34c759,metalness:0.1,roughness:0.6}));
-    name = 'Clip';
   } else if (type === 'snap') {
     var group = new THREE.Group();
     var bMat = new THREE.MeshStandardMaterial({color:0x0071e3,metalness:0.1,roughness:0.6});
     var base = new THREE.Mesh(new THREE.BoxGeometry(20,3,10),bMat); base.position.y=1.5; group.add(base);
     var h1 = new THREE.Mesh(new THREE.BoxGeometry(3,6,10),bMat); h1.position.set(-8.5,6,0); group.add(h1);
     var h2 = h1.clone(); h2.position.x=8.5; group.add(h2);
-    mesh = group; name = 'Snap-fit';
+    mesh = group;
   } else if (type === 'pin') {
-    mesh = new THREE.Mesh(new THREE.CylinderGeometry(2,2,15,16),mat); mesh.position.y=7.5; name='Pin';
+    mesh = new THREE.Mesh(new THREE.CylinderGeometry(2,2,15,16),mat); mesh.position.y=7.5;
   } else if (type === 'raspberry_pi' || type === 'arduino') {
     var w = type==='raspberry_pi'?85:68.6, d = type==='raspberry_pi'?56:53.3;
     var group = new THREE.Group();
@@ -648,32 +1021,45 @@ function addPartSilent(type) {
       var m=new THREE.Mesh(new THREE.BoxGeometry(wall.s[0],wall.s[1],wall.s[2]),gMat);
       m.position.set(wall.p[0],wall.p[1],wall.p[2]); group.add(m);
     });
-    mesh=group; name=type==='raspberry_pi'?'Soporte RPi':'Soporte Arduino';
+    mesh=group;
   }
   if (!mesh) return null;
   mesh.castShadow=true; mesh.receiveShadow=true;
+  return mesh;
+}
+function basePartName(t) {
+  var names = {
+    screw_m3:'Tornillo M3', screw_m4:'Tornillo M4', nut_m3:'Tuerca M3', nut_m4:'Tuerca M4',
+    bracket90:'Bracket 90', clip:'Clip', snap:'Snap-fit', pin:'Pin',
+    raspberry_pi:'Soporte RPi', arduino:'Soporte Arduino'
+  };
+  return names[t] || 'Parte';
+}
+function addPartSilent(type) {
+  var mesh = createPartMesh(type);
+  if (!mesh) return null;
+  var spot = nextSpot();
+  mesh.position.x = spot.x; mesh.position.z = spot.z;
   scene.add(mesh);
-  var obj = { name:name+'_'+(sceneObjects.length+1), mesh:mesh, type:'part', partType:type };
+  var obj = { name:basePartName(type)+'_'+(sceneObjects.length+1), mesh:mesh, type:'part', partType:type };
   sceneObjects.push(obj);
   return obj;
 }
 
 function addPart(type) {
   saveState();
-  addPartSilent(type);
-  var last = sceneObjects[sceneObjects.length-1];
-  if (last) { selectObject(last); updateObjectList(); focusCameraOn(last.mesh); toast('Parte: '+last.name,'success'); }
+  var obj = addPartSilent(type);
+  if (obj) { setTool('move'); selectObject(obj); updateObjectList(); focusCameraOn(obj.mesh); toast('Parte: '+obj.name,'success'); }
 }
 
 // ========== OBJECT OPERATIONS ==========
 function duplicateSelected() {
   if (!selectedObj) { toast('Selecciona un objeto','warning'); return; }
   saveState();
-  var clone = selectedObj.mesh.clone();
-  if (clone.isMesh) clone.material = selectedObj.mesh.material.clone();
+  var clone = deepCloneMesh(selectedObj.mesh);
   clone.position.x += 15;
   scene.add(clone);
-  var obj = { name:selectedObj.name+'_copia', mesh:clone, type:selectedObj.type, shapeType:selectedObj.shapeType, params:selectedObj.params };
+  var obj = { name:selectedObj.name+'_copia', mesh:clone, type:selectedObj.type, shapeType:selectedObj.shapeType, params:selectedObj.params, visible:true };
   sceneObjects.push(obj);
   selectObject(obj);
   updateObjectList();
@@ -693,7 +1079,16 @@ function deleteSelected() {
 
 // ========== UI UPDATES ==========
 function updateObjectList() {
-  document.getElementById('objCount').textContent = sceneObjects.length ? sceneObjects.length + ' objetos' : '';
+  var c = document.getElementById('objCount');
+  var hidden = 0, locked = 0;
+  sceneObjects.forEach(function(o){ if (o.visible === false) hidden++; if (o.locked) locked++; });
+  var txt = sceneObjects.length ? sceneObjects.length + ' objetos' : '';
+  if (hidden) txt += ' · ' + hidden + ' ocultos';
+  if (locked) txt += ' · ' + locked + ' fijos';
+  c.textContent = txt;
+  var st = document.getElementById('listStat');
+  if (st) st.textContent = sceneObjects.length + ' / ' + hidden + ' ocultos / ' + locked + ' fijos';
+  renderObjectList();
 }
 
 function updateProperties() {
@@ -709,14 +1104,13 @@ function updateProperties() {
   document.getElementById('propSx').value = m.scale.x.toFixed(2);
   document.getElementById('propSy').value = m.scale.y.toFixed(2);
   document.getElementById('propSz').value = m.scale.z.toFixed(2);
-  var color = '#888888';
-  if (m.isMesh && m.material.color) color = '#' + m.material.color.getHexString();
-  else if (m.isGroup && m.children[0] && m.children[0].material && m.children[0].material.color) color = '#' + m.children[0].material.color.getHexString();
+  var color = objectColorOf(m);
   document.getElementById('propColor').value = color;
 }
 
 function setProp(type, axis, val) {
   if (!selectedObj) return;
+  if (selectedObj.locked) { toast('Objeto bloqueado','warning'); return; }
   saveState();
   var v = parseFloat(val);
   if (type === 'pos') selectedObj.mesh.position[axis] = v;
@@ -726,13 +1120,325 @@ function setProp(type, axis, val) {
 
 function setColor(val) {
   if (!selectedObj) return;
+  if (selectedObj.locked) { toast('Objeto bloqueado','warning'); return; }
   saveState();
-  var m = selectedObj.mesh;
-  if (m.isMesh && m.material) m.material.color.set(val);
-  else if (m.isGroup && m.children[0] && m.children[0].material) m.children[0].material.color.set(val);
+  applyColor(selectedObj.mesh, val);
 }
 
 function renameSelected(val) { if (selectedObj) { selectedObj.name = val; updateObjectList(); } }
+
+// ========== OPERACIONES ==========
+function nextSpot() {
+  var i = sceneObjects.length;
+  return { x: (i % 5) * 25, z: Math.floor(i / 5) * 25 };
+}
+function readPrimDims() {
+  var o = selectedObj;
+  if (!o || !o.mesh || !o.mesh.isMesh) return null;
+  var g = o.mesh.geometry; g.computeBoundingBox();
+  var b = g.boundingBox;
+  return { x:(b.max.x - b.min.x) * o.mesh.scale.x, y:(b.max.y - b.min.y) * o.mesh.scale.y, z:(b.max.z - b.min.z) * o.mesh.scale.z };
+}
+function objWorldSize(mesh) {
+  var b = new THREE.Box3().setFromObject(mesh);
+  return b.getSize(new THREE.Vector3());
+}
+function scaleSelected(f) {
+  if (!selectedObj) { toast('Selecciona un objeto','warning'); return; }
+  if (selectedObj.locked) { toast('Objeto bloqueado','warning'); return; }
+  saveState();
+  selectedObj.mesh.scale.multiplyScalar(f);
+  updateProperties(); updateObjectList();
+  toast((f > 1 ? 'Agrandado +' : 'Achicado -') + Math.round(Math.abs(1 - f) * 100) + '%', 'success');
+}
+function captureExactSize() {
+  if (!selectedObj) return;
+  var s = objWorldSize(selectedObj.mesh);
+  document.getElementById('propDx').value = s.x.toFixed(1);
+  document.getElementById('propDy').value = s.y.toFixed(1);
+  document.getElementById('propDz').value = s.z.toFixed(1);
+}
+function applyExactSize() {
+  if (!selectedObj) { toast('Selecciona un objeto','warning'); return; }
+  if (selectedObj.locked) { toast('Objeto bloqueado','warning'); return; }
+  var tx = parseFloat(document.getElementById('propDx').value);
+  var ty = parseFloat(document.getElementById('propDy').value);
+  var tz = parseFloat(document.getElementById('propDz').value);
+  if (!isFinite(tx) || !isFinite(ty) || !isFinite(tz) || tx <= 0 || ty <= 0 || tz <= 0) { toast('Valores invalidos','warning'); return; }
+  var cur = objWorldSize(selectedObj.mesh);
+  saveState();
+  selectedObj.mesh.scale.x *= (tx / cur.x);
+  selectedObj.mesh.scale.y *= (ty / cur.y);
+  selectedObj.mesh.scale.z *= (tz / cur.z);
+  updateProperties();
+  toast('Tamaño exacto aplicado','success');
+}
+function opRotate90(axis) {
+  if (!selectedObj) { toast('Selecciona un objeto','warning'); return; }
+  if (selectedObj.locked) { toast('Objeto bloqueado','warning'); return; }
+  saveState();
+  selectedObj.mesh.rotation[axis] += Math.PI / 2;
+  updateProperties();
+  toast('Rotado 90° en ' + axis.toUpperCase(), 'info');
+}
+function mirrorPositions(geo, axis) {
+  var p = geo.getAttribute('position');
+  for (var i = 0; i < p.count; i++) {
+    if (axis === 'x') p.setX(i, -p.getX(i));
+    else if (axis === 'y') p.setY(i, -p.getY(i));
+    else p.setZ(i, -p.getZ(i));
+  }
+  geo.computeVertexNormals();
+}
+function opMirror(axis) {
+  if (!selectedObj) { toast('Selecciona un objeto','warning'); return; }
+  if (selectedObj.locked) { toast('Objeto bloqueado','warning'); return; }
+  saveState();
+  var o = selectedObj;
+  var entries = [];
+  o.mesh.updateMatrixWorld(true);
+  if (o.mesh.isMesh) { entries.push({ m: o.mesh, mat: new THREE.Matrix4() }); }
+  else {
+    var inv = new THREE.Matrix4().getInverse(o.mesh.matrixWorld);
+    o.mesh.traverse(function(c){ if (c.isMesh) entries.push({ m: c, mat: c.matrixWorld.clone().multiply(inv) }); });
+  }
+  var geos = [], mats = [];
+  entries.forEach(function(e){ geos.push(e.m.geometry.clone()); mats.push(e.mat); });
+  var merged = mergeGeometries(geos, mats);
+  merged.computeBoundingBox();
+  var c = merged.boundingBox.getCenter(new THREE.Vector3());
+  merged.translate(-c.x, -c.y, -c.z);
+  mirrorPositions(merged, axis);
+  var col = objectColorOf(o.mesh);
+  var newMesh = new THREE.Mesh(merged, stdMat(parseInt(col.replace('#',''),16)));
+  newMesh.castShadow = true; newMesh.receiveShadow = true;
+  scene.remove(o.mesh); scene.add(newMesh);
+  o.mesh = newMesh; o.custom = true; o.type = 'custom'; o.shapeType = null; o.partType = null;
+  selectObject(o);
+  updateProperties();
+  toast('Espejo ' + axis.toUpperCase(), 'info');
+}
+function opAlignGround() {
+  if (!selectedObj) { toast('Selecciona un objeto','warning'); return; }
+  if (selectedObj.locked) { toast('Objeto bloqueado','warning'); return; }
+  var b = new THREE.Box3().setFromObject(selectedObj.mesh);
+  var minY = b.min.y;
+  if (Math.abs(minY) > 0.001) { saveState(); selectedObj.mesh.position.y -= minY; }
+  updateProperties();
+  toast('Alineado al suelo','info');
+}
+function opCenter() {
+  if (!selectedObj) { toast('Selecciona un objeto','warning'); return; }
+  if (selectedObj.locked) { toast('Objeto bloqueado','warning'); return; }
+  var o = selectedObj;
+  if (!o.mesh.isMesh) { toast('Centrar pivote: solo objetos simples','warning'); return; }
+  var g = o.mesh.geometry.clone();
+  g.computeBoundingBox();
+  var c = g.boundingBox.getCenter(new THREE.Vector3());
+  if (c.length() < 0.001) { toast('Ya esta centrado','info'); return; }
+  saveState();
+  var off = c.clone().multiply(o.mesh.scale).applyEuler(o.mesh.rotation);
+  g.translate(-c.x, -c.y, -c.z);
+  o.mesh.geometry.dispose(); o.mesh.geometry = g;
+  o.mesh.position.add(off);
+  updateProperties();
+  toast('Pivote centrado','info');
+}
+function opBake() {
+  if (!selectedObj) { toast('Selecciona un objeto','warning'); return; }
+  if (selectedObj.locked) { toast('Objeto bloqueado','warning'); return; }
+  saveState();
+  var o = selectedObj;
+  var col = objectColorOf(o.mesh);
+  if (o.mesh.isMesh) {
+    var g = o.mesh.geometry.clone();
+    g.applyMatrix4(o.mesh.matrix);
+    g.computeVertexNormals();
+    o.mesh.geometry.dispose(); o.mesh.geometry = g;
+    o.mesh.position.set(0,0,0); o.mesh.rotation.set(0,0,0); o.mesh.scale.set(1,1,1);
+  } else {
+    var entries = [];
+    o.mesh.updateMatrixWorld(true);
+    var inv = new THREE.Matrix4().getInverse(o.mesh.matrixWorld);
+    o.mesh.traverse(function(c){ if (c.isMesh) entries.push({ m: c, mat: c.matrixWorld.clone().multiply(inv) }); });
+    var geos = [], mats = [];
+    entries.forEach(function(e){ geos.push(e.m.geometry.clone()); mats.push(e.mat); });
+    var merged = mergeGeometries(geos, mats);
+    var newMesh = new THREE.Mesh(merged, stdMat(parseInt(col.replace('#',''),16)));
+    newMesh.position.copy(o.mesh.position);
+    newMesh.rotation.copy(o.mesh.rotation);
+    newMesh.scale.copy(o.mesh.scale);
+    newMesh.castShadow = true; newMesh.receiveShadow = true;
+    scene.remove(o.mesh); scene.add(newMesh);
+    o.mesh = newMesh;
+  }
+  o.custom = true; o.type = 'custom'; o.shapeType = null; o.partType = null;
+  selectObject(o);
+  updateProperties();
+  toast('Convertido a malla','info');
+}
+function showOpParam(label, val) {
+  document.getElementById('opParamLabel').textContent = label;
+  document.getElementById('opParamVal').value = val;
+  document.getElementById('opParamRow').style.display = 'flex';
+}
+function hideOpParam() {
+  document.getElementById('opParamRow').style.display = 'none';
+  pendingOp = null;
+}
+function opHollow() {
+  if (!selectedObj) { toast('Selecciona un objeto','warning'); return; }
+  if (selectedObj.locked) { toast('Objeto bloqueado','warning'); return; }
+  pendingOp = 'hollow'; showOpParam('Grosor (mm)', 2);
+}
+function opRound() {
+  if (!selectedObj) { toast('Selecciona un objeto','warning'); return; }
+  if (selectedObj.locked) { toast('Objeto bloqueado','warning'); return; }
+  pendingOp = 'round'; showOpParam('Radio (mm)', 3);
+}
+function opChamfer() {
+  if (!selectedObj) { toast('Selecciona un objeto','warning'); return; }
+  if (selectedObj.locked) { toast('Objeto bloqueado','warning'); return; }
+  pendingOp = 'chamfer'; showOpParam('Bisel (mm)', 3);
+}
+function opApplyParam() {
+  if (!pendingOp) return;
+  var v = parseFloat(document.getElementById('opParamVal').value);
+  if (!isFinite(v) || v <= 0) { toast('Valor invalido','warning'); return; }
+  if (pendingOp === 'hollow') doHollow(v);
+  else if (pendingOp === 'round') doRound(v);
+  else if (pendingOp === 'chamfer') doChamfer(v);
+  hideOpParam();
+}
+function doHollow(t) {
+  var o = selectedObj;
+  if (!o || o.locked || !o.mesh.isMesh) return;
+  var dims = readPrimDims(); if (!dims) { toast('Tipo no soportado','warning'); return; }
+  var nm = null;
+  if (o.shapeType === 'box') { nm = buildHollowBox(dims.x, dims.y, dims.z, t); }
+  else if (o.shapeType === 'cylinder') { nm = buildHollowCyl(Math.min(dims.x, dims.z) / 2, dims.y, t); }
+  else if (o.shapeType === 'star') {
+    var pr = o.params || [];
+    var oR = Math.min(dims.x, dims.y) / 2;
+    if (oR - t <= 0.1) { toast('Grosor muy grande para la estrella','warning'); return; }
+    var pts = pr[2] || 5;
+    var iR = oR * ((pr[1] ? pr[1] : 5) / (pr[0] ? pr[0] : 10));
+    nm = buildHollowStarGeo(oR, iR, pts, dims.z, t);
+  } else { toast('Hueco: soporta cubo, cilindro y estrella','warning'); return; }
+  saveState();
+  applyColor(nm, objectColorOf(o.mesh));
+  replaceWith(nm);
+  toast('Convertido a hueco (grosor ' + t + 'mm)','success');
+}
+function doRound(r) {
+  var o = selectedObj;
+  if (!o || o.locked || !o.mesh.isMesh) return;
+  var dims = readPrimDims(); if (!dims) return;
+  var nm = null;
+  if (o.shapeType === 'box') { nm = buildRoundedBox(dims.x, dims.y, dims.z, r); }
+  else if (o.shapeType === 'cylinder') { nm = buildRoundCyl(Math.min(dims.x, dims.z) / 2, dims.y, r); }
+  else { toast('Redondeo: soporta cubo y cilindro','warning'); return; }
+  saveState();
+  applyColor(nm, objectColorOf(o.mesh));
+  replaceWith(nm);
+  toast('Esquinas redondeadas (r ' + r + 'mm)','success');
+}
+function doChamfer(f) {
+  var o = selectedObj;
+  if (!o || o.locked || !o.mesh.isMesh) return;
+  var dims = readPrimDims(); if (!dims) return;
+  if (o.shapeType !== 'box') { toast('Esquineros: soporta cubo','warning'); return; }
+  saveState();
+  var nm = buildChamferBox(dims.x, dims.y, dims.z, f);
+  applyColor(nm, objectColorOf(o.mesh));
+  replaceWith(nm);
+  toast('Esquinas biseladas (b ' + f + 'mm)','success');
+}
+
+// ========== LISTA DE OBJETOS ==========
+function escapeHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function toggleObjList() {
+  var p = document.getElementById('listPanel');
+  var open = p.style.display === 'none';
+  p.style.display = open ? 'flex' : 'none';
+  document.getElementById('tList').classList.toggle('active', open);
+  if (open) renderObjectList();
+}
+function selectObjectByIndex(i) {
+  if (sceneObjects[i]) selectObject(sceneObjects[i]);
+}
+function toggleObjVisible(i) {
+  var o = sceneObjects[i]; if (!o) return;
+  o.visible = (o.visible === false);
+  if (o.mesh) o.mesh.visible = o.visible;
+  if (!o.visible && selectedObj === o) selectObject(null);
+  updateObjectList();
+  toast(o.visible ? 'Mostrado: ' + o.name : 'Ocultado: ' + o.name, 'info');
+}
+function toggleObjLock(i) {
+  var o = sceneObjects[i]; if (!o) return;
+  o.locked = !o.locked;
+  if (selectedObj === o) selectObject(o);
+  updateObjectList();
+  toast(o.locked ? 'Bloqueado: ' + o.name : 'Desbloqueado: ' + o.name, 'info');
+}
+function deleteObject(i) {
+  var o = sceneObjects[i]; if (!o) return;
+  saveState();
+  if (transform && selectedObj === o) transform.detach();
+  scene.remove(o.mesh);
+  sceneObjects.splice(i, 1);
+  if (selectedObj === o) selectObject(null);
+  updateObjectList();
+  toast('Eliminado: ' + o.name, 'info');
+}
+function listShowAll() {
+  sceneObjects.forEach(function(o){ o.visible = true; if (o.mesh) o.mesh.visible = true; });
+  updateObjectList();
+  toast('Todos visibles','info');
+}
+function listUnlockAll() {
+  sceneObjects.forEach(function(o){ o.locked = false; });
+  if (selectedObj) selectObject(selectedObj);
+  updateObjectList();
+  toast('Todos desbloqueados','info');
+}
+function renderObjectList() {
+  var body = document.getElementById('listBody');
+  if (!body) return;
+  body.innerHTML = '';
+  for (var i = sceneObjects.length - 1; i >= 0; i--) {
+    var o = sceneObjects[i];
+    var col = objectColorOf(o.mesh);
+    var row = document.createElement('div');
+    row.className = 'lrow' + (o === selectedObj ? ' selected' : '');
+    row.style.opacity = (o.visible === false) ? '0.45' : '1';
+    row.innerHTML =
+      '<span class="ldot" style="background:' + col + '"></span>' +
+      '<span class="lname" title="' + escapeHtml(o.name) + '">' + escapeHtml(o.name) + '</span>' +
+      '<button class="lbtn" data-act="vis" title="Mostrar/Ocultar"><i class="fas ' + (o.visible === false ? 'fa-eye-slash' : 'fa-eye') + '" style="color:' + (o.visible === false ? 'var(--t3)' : 'var(--success)') + '"></i></button>' +
+      '<button class="lbtn" data-act="lock" title="Bloquear/Desbloquear"><i class="fas ' + (o.locked ? 'fa-lock' : 'fa-lock-open') + '" style="color:' + (o.locked ? 'var(--warning)' : 'var(--t3)') + '"></i></button>' +
+      '<button class="lbtn" data-act="del" title="Eliminar"><i class="fas fa-trash" style="color:var(--danger)"></i></button>';
+    (function(idx){
+      row.addEventListener('click', function(e){
+        var t = e.target;
+        var actBtn = t.closest('.lbtn');
+        if (actBtn) {
+          e.stopPropagation();
+          var act = actBtn.getAttribute('data-act');
+          if (act === 'vis') toggleObjVisible(idx);
+          else if (act === 'lock') toggleObjLock(idx);
+          else if (act === 'del') deleteObject(idx);
+          return;
+        }
+        selectObjectByIndex(idx);
+      });
+    })(i);
+    body.appendChild(row);
+  }
+}
 
 // ========== STL PARSER (client-side) ==========
 function parseSTLBinary(bytes) {
@@ -1069,6 +1775,8 @@ window.addEventListener('keydown', function(e) {
   else if (e.ctrlKey&&e.key==='z'){e.preventDefault();undo();}
   else if (e.ctrlKey&&e.key==='y'){e.preventDefault();redo();}
   else if (e.key==='f'||e.key==='F') frameAll();
+  else if (e.key==='l'||e.key==='L') toggleObjList();
+  else if (e.key==='g'||e.key==='G') opAlignGround();
   else if (e.key==='Escape') { selectObject(null); setTool('select'); document.getElementById('shapeStrip').classList.remove('open'); }
   else if (e.key==='='||e.key==='+') zoomIn();
   else if (e.key==='-') zoomOut();
