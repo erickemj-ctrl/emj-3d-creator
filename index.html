@@ -17,7 +17,7 @@
     }
     * { margin:0; padding:0; box-sizing:border-box; }
     body { font-family:'Inter',sans-serif; background:#2d2d30; color:var(--t1); height:100vh; overflow:hidden; user-select:none; }
-    /* #canvas3d handled via inline styles */
+    canvas { display:block; position:fixed; top:0; left:0; width:100vw; height:100vh; z-index:0; }
 
     /* Floating panel base */
     .fpanel {
@@ -347,29 +347,14 @@ function init() {
 
   camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 5000);
   camera.position.set(50, 40, 50);
+  camera.lookAt(0, 0, 0);
 
   renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-  renderer.domElement.style.position = 'fixed';
-  renderer.domElement.style.top = '0';
-  renderer.domElement.style.left = '0';
-  renderer.domElement.style.zIndex = '0';
   document.body.appendChild(renderer.domElement);
-
-  orbit = new THREE.OrbitControls(camera, renderer.domElement);
-  orbit.enableDamping = true;
-  orbit.dampingFactor = 0.08;
-  orbit.rotateSpeed = 0.6;
-  orbit.target.set(0, 0, 0);
-
-  transform = new THREE.TransformControls(camera, renderer.domElement);
-  transform.setSize(1);
-  transform.addEventListener('dragging-changed', function(e) { orbit.enabled = !e.value; });
-  transform.addEventListener('objectChange', function() { updateProperties(); });
-  scene.add(transform.getHelper());
 
   scene.add(new THREE.AmbientLight(0xffffff, 0.5));
   scene.add(new THREE.HemisphereLight(0xffffff, 0xe0e0e0, 0.6));
@@ -383,6 +368,24 @@ function init() {
   var dl2 = new THREE.DirectionalLight(0xffffff, 0.4);
   dl2.position.set(-80, 80, -60); scene.add(dl2);
 
+  animate();
+
+  try {
+    orbit = new THREE.OrbitControls(camera, renderer.domElement);
+    orbit.enableDamping = true;
+    orbit.dampingFactor = 0.08;
+    orbit.rotateSpeed = 0.6;
+    orbit.target.set(0, 0, 0);
+  } catch(e) { console.warn('OrbitControls failed:', e); }
+
+  try {
+    transform = new THREE.TransformControls(camera, renderer.domElement);
+    transform.setSize(1);
+    transform.addEventListener('dragging-changed', function(e) { if(orbit) orbit.enabled = !e.value; });
+    transform.addEventListener('objectChange', function() { updateProperties(); });
+    scene.add(transform.getHelper());
+  } catch(e) { console.warn('TransformControls failed:', e); }
+
   renderer.domElement.addEventListener('pointerdown', onPointerDown);
 
   window.addEventListener('resize', function() {
@@ -390,13 +393,11 @@ function init() {
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
   });
-
-  animate();
 }
 
 function animate() {
   requestAnimationFrame(animate);
-  orbit.update();
+  if (orbit) orbit.update();
   renderer.render(scene, camera);
 }
 
@@ -435,7 +436,7 @@ function createGeometry(type, params) {
 // ========== LEFT CLICK - SELECTION ==========
 function onPointerDown(e) {
   if (e.button !== 0) return;
-  if (transform.dragging) return;
+  if (transform && transform.dragging) return;
 
   var rect = renderer.domElement.getBoundingClientRect();
   var mouse = new THREE.Vector2(
@@ -479,11 +480,11 @@ function selectObject(obj) {
     var m = obj.mesh;
     if (m.isMesh && m.material.emissive) m.material.emissive.setHex(0x333333);
     else if (m.isGroup) m.traverse(function(c){if(c.isMesh&&c.material.emissive)c.material.emissive.setHex(0x333333);});
-    if (currentTool === 'move') { transform.setMode('translate'); transform.attach(m); }
-    else if (currentTool === 'rotate') { transform.setMode('rotate'); transform.attach(m); }
-    else if (currentTool === 'scale') { transform.setMode('scale'); transform.attach(m); }
+    if (currentTool === 'move' && transform) { transform.setMode('translate'); transform.attach(m); }
+    else if (currentTool === 'rotate' && transform) { transform.setMode('rotate'); transform.attach(m); }
+    else if (currentTool === 'scale' && transform) { transform.setMode('scale'); transform.attach(m); }
   } else {
-    transform.detach();
+    if (transform) transform.detach();
   }
   document.getElementById('ctxPanel').classList.toggle('open', !!obj);
   updateObjectList();
@@ -498,7 +499,7 @@ function setTool(tool) {
   var btn = document.getElementById(id);
   if (btn) btn.classList.add('active');
 
-  if (selectedObj) {
+  if (selectedObj && transform) {
     if (tool === 'select') { transform.detach(); }
     else if (tool === 'move') { transform.setMode('translate'); transform.attach(selectedObj.mesh); }
     else if (tool === 'rotate') { transform.setMode('rotate'); transform.attach(selectedObj.mesh); }
@@ -509,11 +510,11 @@ function setTool(tool) {
 
 function setView(view) {
   var d = 80;
-  if (view === 'front') { camera.position.set(0, 10, d); orbit.target.set(0,10,0); }
-  else if (view === 'top') { camera.position.set(0, d, 0.01); orbit.target.set(0,0,0); }
-  else if (view === 'right') { camera.position.set(d, 10, 0); orbit.target.set(0,10,0); }
-  else if (view === 'iso') { camera.position.set(50, 40, 50); orbit.target.set(0,0,0); }
-  orbit.update();
+  if (view === 'front') { camera.position.set(0, 10, d); if(orbit) orbit.target.set(0,10,0); }
+  else if (view === 'top') { camera.position.set(0, d, 0.01); if(orbit) orbit.target.set(0,0,0); }
+  else if (view === 'right') { camera.position.set(d, 10, 0); if(orbit) orbit.target.set(0,10,0); }
+  else if (view === 'iso') { camera.position.set(50, 40, 50); if(orbit) orbit.target.set(0,0,0); }
+  if (orbit) orbit.update();
   setStatus('Vista: ' + view);
 }
 
@@ -521,11 +522,11 @@ function resetCamera() { setView('iso'); }
 
 function centerView() {
   if (selectedObj) { focusCameraOn(selectedObj.mesh); }
-  else { orbit.target.set(0,0,0); camera.position.set(50,40,50); orbit.update(); }
+  else { if(orbit) orbit.target.set(0,0,0); camera.position.set(50,40,50); if(orbit) orbit.update(); }
 }
 
-function zoomIn() { camera.position.lerp(orbit.target, 0.2); orbit.update(); }
-function zoomOut() { var dir = camera.position.clone().sub(orbit.target).multiplyScalar(1.25); camera.position.copy(orbit.target).add(dir); orbit.update(); }
+function zoomIn() { if(!orbit)return; camera.position.lerp(orbit.target, 0.2); orbit.update(); }
+function zoomOut() { if(!orbit)return; var dir = camera.position.clone().sub(orbit.target).multiplyScalar(1.25); camera.position.copy(orbit.target).add(dir); orbit.update(); }
 
 function focusCameraOn(obj) {
   var box = new THREE.Box3().setFromObject(obj);
@@ -534,8 +535,7 @@ function focusCameraOn(obj) {
   var maxDim = Math.max(size.x, size.y, size.z);
   var dist = maxDim * 2.5;
   camera.position.set(center.x + dist * 0.7, center.y + dist * 0.5, center.z + dist * 0.7);
-  orbit.target.copy(center);
-  orbit.update();
+  if(orbit) { orbit.target.copy(center); orbit.update(); }
 }
 
 function frameAll() {
@@ -547,8 +547,7 @@ function frameAll() {
   var maxDim = Math.max(size.x, size.y, size.z);
   var dist = maxDim * 2;
   camera.position.set(center.x + dist * 0.7, center.y + dist * 0.5, center.z + dist * 0.7);
-  orbit.target.copy(center);
-  orbit.update();
+  if(orbit) { orbit.target.copy(center); orbit.update(); }
 }
 
 // ========== GRID / WIREFRAME ==========
@@ -684,7 +683,7 @@ function duplicateSelected() {
 function deleteSelected() {
   if (!selectedObj) { toast('Selecciona un objeto','warning'); return; }
   saveState();
-  transform.detach();
+  if (transform) transform.detach();
   scene.remove(selectedObj.mesh);
   sceneObjects = sceneObjects.filter(function(o){return o !== selectedObj;});
   selectObject(null);
