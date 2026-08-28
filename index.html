@@ -161,6 +161,17 @@
     .unit-sel { background:transparent; border:none; color:var(--t1); font-size:11px; font-weight:600; cursor:pointer; outline:none; padding:0; }
     .unit-sel option { background:var(--bg2); color:var(--t1); }
 
+    .quick-edit {
+      position:absolute; z-index:12; left:50%; bottom:80px; transform:translateX(-50%) scale(.96); opacity:0;
+      display:flex; align-items:center; gap:3px; padding:6px;
+      background:var(--panel-bg); backdrop-filter:var(--panel-blur); -webkit-backdrop-filter:var(--panel-blur);
+      border:1px solid var(--border); border-radius:12px; box-shadow:0 8px 32px rgba(0,0,0,.14);
+      pointer-events:auto; transition:all .15s;
+    }
+    .quick-edit.open { opacity:1; transform:translateX(-50%) scale(1); }
+    .quick-edit .fbtn { width:44px; height:40px; }
+    .qe-info { font-size:10px; color:var(--t1); font-weight:600; padding:0 8px 0 4px; max-width:180px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
     ::-webkit-scrollbar { width:4px; }
     ::-webkit-scrollbar-track { background:transparent; }
     ::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
@@ -341,6 +352,16 @@
     </div>
   </div>
   <div class="list-body" id="listBody"></div>
+</div>
+
+<div class="quick-edit" id="quickEdit">
+  <span class="qe-info" id="qeInfo"></span>
+  <button class="fbtn" id="qeMove" onclick="setTool('move')" title="Mover (W)"><i class="fas fa-arrows-alt"></i><span>Mover</span></button>
+  <button class="fbtn" id="qeRotate" onclick="setTool('rotate')" title="Rotar (E)"><i class="fas fa-sync-alt"></i><span>Rotar</span></button>
+  <button class="fbtn" id="qeScale" onclick="setTool('scale')" title="Escalar (R)"><i class="fas fa-expand-arrows-alt"></i><span>Escalar</span></button>
+  <div class="fsep"></div>
+  <button class="fbtn" onclick="duplicateSelected()" title="Duplicar (Ctrl+D)"><i class="fas fa-clone"></i><span>Dup</span></button>
+  <button class="fbtn" onclick="deleteSelected()" title="Eliminar (Supr)" style="color:var(--danger)"><i class="fas fa-trash"></i><span>Borrar</span></button>
 </div>
 
 <div class="ai-panel" id="aiPanel">
@@ -897,6 +918,7 @@ function selectObject(obj) {
   document.getElementById('ctxPanel').classList.toggle('open', !!obj);
   updateObjectList();
   updateProperties();
+  updateQuickEdit();
 }
 
 // ========== TOOLS ==========
@@ -914,6 +936,7 @@ function setTool(tool) {
     else if (tool === 'scale') { transform.setMode('scale'); transform.attach(selectedObj.mesh); }
   }
   setStatus(tool === 'select' ? 'Seleccionar: haz click o arrastra el objeto para moverlo' : tool === 'move' ? 'Mover: arrastra el objeto o los ejes del gizmo' : tool === 'rotate' ? 'Rotar: arrastra los anillos del gizmo' : 'Escalar: arrastra los cubos del gizmo');
+  updateQuickEdit();
 }
 
 // ========== DRAG DIRECTO ==========
@@ -1988,6 +2011,21 @@ function toast(msg, type) {
 }
 
 function setStatus(msg) { document.getElementById('statusText').textContent = msg; }
+
+// ========== BARRA RAPIDA DE EDICION (GIZMO SIEMPRE VISIBLE) ==========
+function updateQuickEdit() {
+  var q = document.getElementById('quickEdit'); if (!q) return;
+  q.classList.toggle('open', !!selectedObj);
+  if (!selectedObj) return;
+  var el = document.getElementById('qeInfo'); if (el) {
+    var s = objWorldSize(selectedObj.mesh);
+    el.textContent = selectedObj.name + ' - ' + dispVal(s.x) + ' x ' + dispVal(s.y) + ' x ' + dispVal(s.z) + ' ' + currentUnit;
+  }
+  var map = { move:'qeMove', rotate:'qeRotate', scale:'qeScale' };
+  ['qeMove','qeRotate','qeScale'].forEach(function(id){ var b = document.getElementById(id); if (b) b.classList.remove('active'); });
+  var id = map[currentTool];
+  if (id) { var b = document.getElementById(id); if (b) b.classList.add('active'); }
+}
 
 function newProject() {
   if (sceneObjects.length > 0 && !confirm('Nuevo proyecto? Se perderan los cambios.')) return;
